@@ -4,4 +4,5 @@
 # Track meta-layer and project-factory
 !/.claude/
 !/.gitignore
+!/README.md
 !/project-factory/
