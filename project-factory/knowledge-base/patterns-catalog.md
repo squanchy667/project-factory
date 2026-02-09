@@ -51,9 +51,9 @@ export type User = z.infer<typeof UserSchema>;
 ## Process Patterns
 
 ### Phased Task Execution
-**Source:** ChatAgent, TarotBattlegrounds
+**Source:** ChatAgent, TarotBattlegrounds, FlappyKookaburra
 **Context:** Large projects requiring systematic implementation
-**Pattern:** Break project into phases (Foundation → Core → Integration → Production). Each phase has tasks with dependency tracking. Tasks within a phase run in parallel batches.
+**Pattern:** Break project into phases (Foundation → Core → Integration → Production). Each phase has tasks with dependency tracking. Tasks within a phase run in parallel batches. Before batching, cross-reference "Files to Create/Modify" to detect file conflicts — tasks touching the same file must be sequenced.
 **Optimal batch size:** 3-5 concurrent agents.
 **When to use:** Any project with more than 10 tasks.
 
@@ -114,10 +114,47 @@ export type User = z.infer<typeof UserSchema>;
 **When to use:** Chat applications with LLM-powered responses.
 
 ### ScriptableObjects for Data
-**Source:** TarotBattlegrounds
+**Source:** TarotBattlegrounds, FlappyKookaburra
 **Context:** Unity games with data-driven design
-**Pattern:** Use ScriptableObjects for game data (cards, abilities, characters). Load at runtime. Edit in Unity Inspector.
+**Pattern:** Use ScriptableObjects for game data (cards, abilities, characters, tuning values). Load at runtime. Edit in Unity Inspector.
 **When to use:** Unity games with configurable data.
+
+### Singleton-Events-SO Trinity (Unity)
+**Source:** FlappyKookaburra
+**Context:** Unity 2D games with multiple manager systems
+**Pattern:** Every manager follows the same template: static `Instance` property, `Awake` null-check/destroy duplicate, `static event Action<T>` for communication, `[SerializeField]` for ScriptableObject config. Subscribe in `OnEnable`, unsubscribe in `OnDisable`. Systems never poll — they react to events.
+```csharp
+public class XManager : MonoBehaviour {
+    public static XManager Instance { get; private set; }
+    public static event Action<T> OnSomethingChanged;
+    [SerializeField] private XConfig _config;
+    private void Awake() { if (Instance != null) { Destroy(gameObject); return; } Instance = this; }
+    private void OnEnable() { GameManager.OnGameStateChanged += HandleGameStateChanged; }
+    private void OnDisable() { GameManager.OnGameStateChanged -= HandleGameStateChanged; }
+}
+```
+**When to use:** Unity games with 3+ interconnected systems.
+
+### AnimationCurve-Based Difficulty Progression
+**Source:** FlappyKookaburra
+**Context:** Games with score-driven difficulty ramp
+**Pattern:** Define `AnimationCurve` fields in a DifficultyConfig ScriptableObject. DifficultyManager evaluates curves with player score as input, lerps between initial and target values. Designers tune curves visually in Inspector without code changes.
+```csharp
+float gapT = _config.gapSizeCurve.Evaluate(score);
+CurrentGapSize = Mathf.Lerp(_config.initialGapSize, _config.minimumGapSize, gapT);
+```
+**When to use:** Any game with progressive difficulty that needs designer-friendly tuning.
+
+### Editor Setup Script Pattern (Unity)
+**Source:** FlappyKookaburra
+**Context:** Unity projects where the automated pipeline generates code but can't wire the scene
+**Pattern:** Create an Editor script (`Assets/Editor/GameSetup.cs`) with a `[MenuItem]` entry that automates scene wiring: creating ScriptableObject instances, building prefabs with correct component references, setting up managers with serialized field bindings, configuring camera/UI hierarchy. The script bridges the gap between code-generated infrastructure and a playable game. Key considerations:
+- Scale placeholder sprites to match physics constants (e.g., `_pipeHeight`)
+- Create world boundary colliders (ground, ceiling, walls)
+- Wire all `[SerializeField]` references via `SerializedObject`
+- Create UI hierarchy with Canvas, panels, and event system
+
+**When to use:** Any Unity project using the project factory pipeline. Run after all code tasks complete and packages are imported.
 
 ---
 
@@ -138,3 +175,18 @@ export type User = z.infer<typeof UserSchema>;
 ### Monolithic Tasks
 **Problem:** Tasks that take hours with dozens of subtasks are hard to parallelize.
 **Fix:** Break into 15-60 minute tasks with clear boundaries.
+
+### Parallel Agents on Shared Git Working Directory
+**Source:** FlappyKookaburra
+**Problem:** Multiple agents running `git checkout` in the same repo directory interfere with each other's branch state. Agent A checks out its branch, then Agent B's bash call runs on Agent A's branch instead of its own.
+**Fix:** Use single-command chains (`git checkout X && git add && git commit`) to minimize race windows. Better: use `git worktree` to give each agent an isolated working directory. Best: sequence agents that modify different branches.
+
+### Sprite-Physics Size Mismatch (Unity)
+**Source:** FlappyKookaburra
+**Problem:** Code assumes sprite dimensions that don't match actual assets. `ObstaclePair._pipeHeight = 20f` but the placeholder pipe sprite is only 4 world units tall (32×256px at 64ppu). Pipes get positioned entirely offscreen, making obstacles invisible.
+**Fix:** When creating placeholder sprites in an editor setup script, always scale transforms to match physics constants. Add comments linking sprite dimensions to the physics values they must match. Consider adding runtime assertions: `Debug.Assert(spriteRenderer.bounds.size.y >= _pipeHeight)`.
+
+### Marking Editor-Only Tasks as Done
+**Source:** FlappyKookaburra
+**Problem:** Unity tasks requiring Editor operations (sprite import, animation clips, WebGL build) are marked DONE when only code infrastructure exists. Binary assets are missing.
+**Fix:** Split tasks into explicit "code" and "editor" subtasks. Tag editor-required subtasks. Use `DONE*` convention with clear notes about what remains.
