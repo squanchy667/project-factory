@@ -1,0 +1,7 @@
+# Ignore everything
+/*
+
+# Track meta-layer and project-factory
+!/.claude/
+!/.gitignore
+!/project-factory/
