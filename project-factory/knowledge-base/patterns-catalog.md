@@ -97,6 +97,12 @@ export type User = z.infer<typeof UserSchema>;
 **Pattern:** Use skills (SKILL.md) for knowledge that applies to every task: coding conventions, workspace structure, validation patterns. Use agents for task-specific behavior.
 **When to use:** When there's domain knowledge needed across all tasks.
 
+### Research-First Agent Generation
+**Source:** Project Factory
+**Context:** Generating project-specific Claude Code agents from `/tailor-agents`
+**Pattern:** Before falling back to local templates, search online for cursor rules, Claude Code configs, and stack-specific conventions. Score each source on Specificity (1-5) and Relevance (1-5). If 2+ independent sources score >= 7/10 combined, synthesize the best patterns into the agent (Mode A). Otherwise, fall back to local templates (Mode B). The synthesis algorithm takes the structure skeleton from the highest-scored source, merges conventions as a deduplicated union, and resolves conflicts by: project code > higher score > more specific > more recent. Research-sourced agents include `<!-- Research Sources: ... -->` attribution for traceability.
+**When to use:** Always during `/tailor-agents` — research is the default path, templates are the fallback. Especially valuable for mainstream stacks (React, Next.js, Express, Unity) where high-quality public configs exist.
+
 ---
 
 ## Code Patterns

@@ -66,9 +66,10 @@ The meta-layer itself lives at `.claude/` in the workspace root:
 │   ├── execute-phase.md
 │   ├── sync-docs.md
 │   └── capture-learnings.md
-├── agents/                       ← 6 meta-agents
+├── agents/                       ← 7 meta-agents
 │   ├── project-planner.md
 │   ├── docs-generator.md
+│   ├── agent-researcher.md
 │   ├── agent-tailor.md
 │   ├── test-generator.md
 │   ├── phase-orchestrator.md
@@ -133,8 +134,9 @@ Uses the `project-planner` and `docs-generator` agents to produce:
 
 ### Step 3 — Configure (`/tailor-agents`)
 
-Uses the `agent-tailor` agent to create the code repo's `.claude/` directory:
-- Agents customized with real file paths, schemas, and conventions
+Uses the `agent-researcher` and `agent-tailor` agents to create the code repo's `.claude/` directory. For each agent role, the researcher searches online for cursor rules, Claude Code configs, and stack-specific conventions, then scores them. High-quality research is synthesized into agents (Mode A); when research is insufficient, local templates are used as fallback (Mode B).
+
+- Agents enriched with battle-tested, version-specific conventions from online sources
 - Commands tailored to the project's tech stack
 - Skills with project-specific patterns
 - `CLAUDE.md` describing the project's stack and structure
@@ -186,7 +188,8 @@ Extracts patterns and insights from a completed project:
 |-------|---------|------------|
 | `project-planner` | Design architecture and decompose into phased tasks | `/plan-project` |
 | `docs-generator` | Create GitBook-compatible documentation structure | `/plan-project`, `/sync-docs` |
-| `agent-tailor` | Customize agent templates with project-specific details | `/tailor-agents` |
+| `agent-researcher` | Search online for best-practice coding configs, evaluate quality, produce research reports | `/tailor-agents` |
+| `agent-tailor` | Synthesize research or customize templates into project-specific agents | `/tailor-agents` |
 | `test-generator` | Generate test files from task acceptance criteria | `/generate-tests` |
 | `phase-orchestrator` | Execute task batches with dependency ordering | `/execute-phase` |
 | `quality-gate` | Validate task completion against acceptance criteria | `/execute-phase` |
@@ -291,3 +294,12 @@ Post-project analyses for completed projects:
 2. Add under the appropriate category (Architecture, Process, Agent, Code)
 3. Follow the format: Source, Context, Pattern, When to use
 4. Include a code example if applicable
+
+### Improving Agent Research
+
+The research-first pipeline (`agent-researcher` → `agent-tailor` Mode A) can be extended:
+
+1. **Add query types**: Edit the search query taxonomy in `agent-researcher.md` to target new config file formats
+2. **Tune scoring thresholds**: Adjust the 7/10 decision gate in `tailor-agents.md` Step 4b based on observed quality
+3. **Add per-role queries**: Update the per-role query focus table in `knowledge-base/research-strategy.md`
+4. **Review research quality**: Check `<!-- Research Sources: ... -->` comments in generated agents to audit what research contributed
