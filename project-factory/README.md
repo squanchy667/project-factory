@@ -1,10 +1,18 @@
 # Project Factory
 
-Meta-layer for building applications with Claude Code. Provides templates, schemas, a knowledge base, and 7 meta-commands that take a project from idea to production.
+Meta-layer for building applications with Claude Code. Provides templates, schemas, a knowledge base, and 8 meta-commands that take a project from idea to production.
 
 ## Quick Start
 
-Run the 7 commands in sequence:
+### One command (recommended)
+
+```
+/build-app "Name" type "description"
+```
+
+Runs the full 7-step protocol with user checkpoints between major phases. Can be interrupted and re-run — automatically resumes from the last completed step.
+
+### Or run the 7 commands individually:
 
 ```
 1. /init-project "Name" type "description"   → Two repos (code + docs)
@@ -49,7 +57,8 @@ The meta-layer itself lives at `.claude/` in the workspace root:
 
 ```
 .claude/
-├── commands/                     ← 7 meta-commands
+├── commands/                     ← 8 meta-commands
+│   ├── build-app.md
 │   ├── init-project.md
 │   ├── plan-project.md
 │   ├── tailor-agents.md
@@ -68,6 +77,29 @@ The meta-layer itself lives at `.claude/` in the workspace root:
     ├── task-management/SKILL.md
     └── docs-repo-patterns/SKILL.md
 ```
+
+## Orchestrator: `/build-app`
+
+Single command that runs the full protocol with user checkpoints between major phases.
+Can be interrupted and re-run — automatically resumes from the last completed step.
+
+**Input:** `"ProjectName" project-type "Description"`
+
+**Resumption logic** — `/build-app` detects project state and resumes:
+
+| Check | Means | Resume From |
+|-------|-------|-------------|
+| No project directory | Fresh start | Step 1 (Birth) |
+| Repos exist but no TASK_BOARD.md | Init done | Step 2 (Plan) |
+| TASK_BOARD.md exists but no `.claude/` in code repo | Plan done | Step 3 (Configure) |
+| `.claude/` exists but no test files | Configure done | Step 4 (Test) |
+| Test files exist, tasks PENDING | Tests done | Step 5 (Build Phase 1) |
+| Some phases DONE, some PENDING | Build in progress | Step 5 (Build next phase) |
+| All tasks DONE | Build complete | Step 6 (Learn) |
+
+**User checkpoints:**
+- After planning (Step 2): pauses for user to review TASK_BOARD.md and task specs
+- After each build phase (Step 5): pauses on failures so user can fix before continuing
 
 ## The Protocol (7 Steps)
 

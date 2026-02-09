@@ -16,6 +16,7 @@ Each project lives in its own parent directory with paired repos:
 
 | Command | Purpose |
 |---------|---------|
+| `/build-app` | Full pipeline: idea → production (orchestrates all commands below) |
 | `/init-project` | Create project structure from idea |
 | `/plan-project` | Generate full planning artifacts |
 | `/tailor-agents` | Generate project-specific .claude/ config |
