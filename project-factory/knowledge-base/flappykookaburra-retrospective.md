@@ -8,11 +8,11 @@
 | **Type** | unity-game (2D) |
 | **Engine** | Unity 2022.3 LTS, C# 9.0+ |
 | **Build Target** | WebGL (primary), Windows/macOS (dev) |
-| **Completed** | 2026-02-09 (single session) |
-| **Tasks** | 20/20 (100%) |
-| **Phases** | 4 planned → 4 actual |
-| **Agents** | 7 types defined, all used |
-| **Commits** | 32 (20 task + 10 merge + 2 setup) |
+| **Completed** | 2026-02-10 (two sessions) |
+| **Tasks** | 33/33 (100%) — 20 original + 13 premium upgrade |
+| **Phases** | 4 planned → 6 actual (Phase 5-6 added for visual upgrade) |
+| **Agents** | 9 types defined, all used (7 original + 2 premium) |
+| **Commits** | 45+ (33 task + merges + fixes + art integration) |
 
 ## Phase Completion Summary
 
@@ -22,7 +22,10 @@
 | 2 | Core Gameplay | 4 (T006–T009) | 2 | DONE |
 | 3 | Polish | 6 (T010–T015) | 2 | DONE |
 | 4 | Production | 5 (T016–T020) | 2 | DONE |
-| **Total** | | **20** | **8** | **100%** |
+| **Total (Phase 1-4)** | | **20** | **8** | **100%** |
+| 5 | Art & Animation Overhaul | 6 (T030–T035) | 3 | DONE |
+| 6 | UI Premium Polish | 7 (T036–T042) | 4 | DONE |
+| **Total (All)** | | **33** | **15** | **100%** |
 
 ## Planned vs Actual
 
@@ -116,7 +119,78 @@ Multiple agents running bash commands on the same repo can interfere with each o
 2. **Add branch contention handling** — The `/execute-phase` command should warn about parallel agent limitations and optionally use worktrees.
 3. **Consider task tagging** — Tags like `cli-only`, `editor-required`, `binary-asset` help batch planners understand what can be automated.
 
-## Phase 5: Editor Integration (Post-Pipeline)
+---
+
+## Phase 5-6: Premium Visual Upgrade
+
+### Context
+After the base game was functionally complete (20/20 tasks), a second session added 13 tasks (T030-T042) across two new phases to transform the stock-looking game into a premium casual game with DOTween animations, medals, choreographed UI, and real pixel art.
+
+### Phase 5 — Art & Animation Overhaul (T030-T035)
+
+| Task | Description | Status | Notes |
+|------|------------|--------|-------|
+| T030 | Custom DOTween-compatible tweening library | DONE | Full Tween/Sequence/Easing system in Assets/Plugins/DOTween/ |
+| T031 | Bird sprite integration with real pixel art | DONE | Real Kookaburra.png integrated, scale-based animation |
+| T032 | Scale-based squash/stretch animator | DONE | Idle, Flap, Glide, Die states |
+| T033 | Obstacle art — real eucalyptus pipe sprites | DONE | Real Pipe.png, top pipe flipped |
+| T034 | Environment art — Australian outback backgrounds | DONE | 2 real background layers + ground |
+| T035 | Art integration and GameSetup overhaul | DONE | Major GameSetup.cs rewrite |
+
+### Phase 6 — UI Premium Polish (T036-T042)
+
+| Task | Description | Status | Notes |
+|------|------------|--------|-------|
+| T036 | UIColorPalette ScriptableObject | DONE | Themed color system |
+| T037 | MedalConfig SO + MedalDisplay + SpriteScoreDisplay | DONE | Bronze/Silver/Gold/Platinum |
+| T038 | GameOverSequence with DOTween choreography | DONE | Slide, count-up, medal pop |
+| T039 | TitleScreenAnimator | DONE | Logo drop, bob, tap pulse, exit |
+| T040 | DeathSequence | DONE | Screen flash, camera shake, slow-mo |
+| T041 | ButtonAnimator with IPointerDown/Up feedback | DONE | DOTween press/release |
+| T042 | UI integration — UIManager wired to all systems | DONE | Full flow verified |
+
+### New Agents Added
+
+| Agent Type | Tasks | Notes |
+|-----------|-------|-------|
+| art-rigging-agent | 6 (T030-T035) | 2D sprite rigging, modular assets, DOTween procedural animation |
+| ui-premium-agent | 7 (T036-T042) | DOTween choreography, sprite displays, medals, screen transitions |
+
+### What Worked in Phase 5-6
+
+1. **Custom DOTween implementation** — Instead of importing the real DOTween package (which would need OpenUPM/manual asset import), we built a lightweight compatible library. This was fully automatable via CLI — no Editor dependency. The API surface (Tween, Sequence, easing, extension methods) covered all UI choreography needs.
+
+2. **DOTween Sequence choreography** — The `GameOverSequence` uses staged reveals (panel slide → score count-up → medal pop → buttons). This pattern produces polished UI with minimal code. The `InsertCallback` pattern is particularly useful for non-tween actions mid-sequence.
+
+3. **Scale-based animation over rotation-based multi-part rig** — The initial plan called for a 5-part bird rig with rotation-based wing animation. This was implemented but replaced with simpler scale-based squash/stretch when real art was integrated. The scale approach is more forgiving of different sprite proportions and works with single-frame art.
+
+4. **Graceful degradation via null checks** — Every premium UI component (TitleScreenAnimator, DeathSequence, GameOverSequence, MedalDisplay) is null-checked before use. The game works with or without premium features wired, making incremental testing possible.
+
+### What Didn't Work in Phase 5-6
+
+1. **Assembly Definition (.asmdef) isolation gaps** — The FlappyKookaburra.asmdef in Assets/Scripts/ created an assembly boundary, but DOTween in Assets/Plugins/ had no .asmdef. This caused CS0246 "namespace not found" errors across 11 files. Fix: Created DOTween.asmdef and added it as a reference. **Lesson: When adding new code directories (especially Plugins/), always check if existing .asmdef files need updated references.**
+
+2. **Placeholder sprite opacity** — Generated placeholder sprites were solid-color rectangles with no transparency. When rendered in-game, they appeared as opaque blocks instead of shaped objects. Fix: Added shape-aware texture generation (ellipse, rounded rectangle) with RGBA32 transparency. **Lesson: Always generate placeholder sprites with transparency and approximate shapes — solid rectangles look broken in-game.**
+
+3. **Real art PPU (Pixels Per Unit) mismatch** — When real pixel art (784×1168px Kookaburra, Pipe.png) was imported at default PPU 100, sprites were 7-8 world units wide — far too large for a game with ortho camera size 5. This requires manual PPU tuning in Unity Editor (PPU 400-600 for the bird). **Lesson: PPU is a critical parameter that can't be reliably set from CLI. Always document expected PPU values and include them in known-issues for Editor setup.**
+
+4. **JPG sprite sheets can't be used directly** — The 5-frame animation sprite sheet was a JPG (no alpha channel). Unity needs PNG with transparency for sprite-swap animation. Even if it were PNG, slicing into frames requires the Sprite Editor. **Lesson: Animation sprite sheets need (a) PNG format with alpha, (b) manual Unity Editor slicing, (c) animation clip creation. These are fundamentally Editor-only tasks.**
+
+5. **Multi-part bird rig complexity vs. payoff** — The planned 5-part rig (body, 2 wings, tail, eye) with rotation-based animation was architecturally clean but impractical when real art arrived as a single sprite. The pivot points, sorting orders, and rotation curves all became irrelevant. **Lesson: For art-dependent features, implement the simpler version first (scale-based animation). Only upgrade to complex rigs when actual decomposed art assets are confirmed available.**
+
+### Key Architectural Decision: Custom DOTween Library
+
+Rather than importing the official DOTween package (which requires Unity Package Manager, OpenUPM, or manual .unitypackage import — all requiring Editor), we built a lightweight DOTween-compatible library:
+
+- **Location:** `Assets/Plugins/DOTween/`
+- **Files:** `DOTween.cs` (core engine: Tween, Sequence, easing), `DOTweenExtensions.cs` (extension methods for Transform, RectTransform, CanvasGroup, Image, TMP_Text)
+- **Assembly:** Own `.asmdef` referenced by `FlappyKookaburra.asmdef`
+- **Auto-init:** `DOTweenInitializer.cs` with `[RuntimeInitializeOnLoadMethod]`
+- **API surface:** `DOTween.To()`, `DOTween.CreateSequence()`, `.SetEase()`, `.SetLoops()`, `.SetUpdate()`, `.SetDelay()`, `.OnComplete()`, `.Kill()`, `.KillAll()`, extension methods (`.DOMove()`, `.DOScale()`, `.DOFade()`, `.DOAnchorPosY()`, etc.)
+
+This approach is **fully CLI-automatable** and avoids the Editor dependency of package import. The tradeoff is that the custom implementation is simpler (no caching, no pooling, fewer edge cases) but covers all needed use cases.
+
+## Editor Integration (Post-Pipeline, between Phase 4 and Phase 5-6)
 
 After all 20 tasks completed via the project factory pipeline, running the `GameSetup.cs` editor script revealed several gaps between code-generated infrastructure and a playable game:
 
@@ -142,7 +216,10 @@ The automated pipeline produces correct **code infrastructure** but can't valida
 
 ## Template Candidates
 
-1. **unity-game agent specs** — The 7 agent definitions (setup, systems, gameplay, ui, art, test, devops) are reusable for any Unity 2D game. Could become a standard template set.
+1. **unity-game agent specs** — The 9 agent definitions (setup, systems, gameplay, ui, art, test, devops, art-rigging, ui-premium) are reusable for any Unity 2D game. Could become a standard template set.
 2. **Singleton MonoBehaviour template** — The Awake + Instance + events pattern appears in every manager. Could be a code snippet in the systems-agent template.
 3. **Unity test assembly definitions** — PlayModeTests.asmdef and EditModeTests.asmdef are identical across projects. Should be template files.
 4. **WebGLBuilder.cs** — The Editor build script with standard settings is project-agnostic. Good candidate for a devops-agent template.
+5. **Custom DOTween library** — The lightweight DOTween implementation (Tween, Sequence, easing, extensions) is project-agnostic. Good candidate for a unity-game Plugins/ template when the real DOTween can't be imported via CLI.
+6. **Premium UI component set** — GameOverSequence, TitleScreenAnimator, DeathSequence, ScreenFlash, ButtonAnimator, MedalDisplay, SpriteScoreDisplay are reusable across casual games with minimal modification. Could become a ui-premium-agent template.
+7. **UIColorPalette + MedalConfig SOs** — ScriptableObject-driven UI theming and medal thresholds are game-agnostic patterns. Good template candidates for any score-based game.

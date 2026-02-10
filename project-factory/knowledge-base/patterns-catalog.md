@@ -162,6 +162,40 @@ CurrentGapSize = Mathf.Lerp(_config.initialGapSize, _config.minimumGapSize, gapT
 
 **When to use:** Any Unity project using the project factory pipeline. Run after all code tasks complete and packages are imported.
 
+### DOTween Sequence Choreography (Unity UI)
+**Source:** FlappyKookaburra (Phase 5-6)
+**Context:** Unity games with staged UI reveals (game over screens, title screens, death effects)
+**Pattern:** Use DOTween Sequences to choreograph multi-step UI animations. Each step is appended (sequential) or joined (parallel) with precise timing. Use `InsertCallback` for non-tween actions mid-sequence. Always use `SetUpdate(true)` on UI tweens so they work during `timeScale = 0` or slow-mo. Kill sequences before scene transitions.
+```csharp
+var seq = DOTween.CreateSequence();
+seq.Append(panel.DOAnchorPosY(targetY, 0.3f).SetEase(Ease.OutBack));
+seq.InsertCallback(0.3f, () => PlaySFX());
+seq.Append(scoreText.DOCounter(0, finalScore, 1f));
+seq.Append(medal.DOScale(1f, 0.3f).SetEase(Ease.OutElastic));
+seq.OnComplete(() => ShowButtons());
+```
+**When to use:** Any Unity UI that needs staged reveals, count-up effects, or choreographed transitions.
+
+### Custom Library Implementation (CLI-Automatable)
+**Source:** FlappyKookaburra (Phase 5-6)
+**Context:** Unity projects where importing packages requires Editor (OpenUPM, .unitypackage)
+**Pattern:** Instead of importing external packages that require Unity Editor, build a lightweight compatible library in `Assets/Plugins/`. Implement only the API surface needed. Use own `.asmdef` for assembly isolation. Auto-initialize via `[RuntimeInitializeOnLoadMethod]`. This is fully CLI-automatable — no Editor dependency for the import step.
+**Tradeoff:** Simpler implementation (no caching/pooling), but covers all needed use cases and is fully automatable.
+**When to use:** Unity CLI-driven pipelines that need external library functionality without Editor access.
+
+### Graceful Degradation via Null Checks (Unity Premium Features)
+**Source:** FlappyKookaburra (Phase 5-6)
+**Context:** Adding optional premium UI/visual features to a working game
+**Pattern:** Every premium component (TitleScreenAnimator, DeathSequence, GameOverSequence, MedalDisplay) is `[SerializeField]` with null-check guards. The game works with or without premium features wired. This enables incremental testing — wire one feature at a time and verify.
+```csharp
+if (_deathSequence != null) {
+    _deathSequence.Play(ShowGameOver);
+} else {
+    ShowGameOver(); // Fallback: immediate transition
+}
+```
+**When to use:** When layering premium visual/UI features onto a working base game.
+
 ---
 
 ## Anti-Patterns (What NOT to Do)
@@ -196,3 +230,23 @@ CurrentGapSize = Mathf.Lerp(_config.initialGapSize, _config.minimumGapSize, gapT
 **Source:** FlappyKookaburra
 **Problem:** Unity tasks requiring Editor operations (sprite import, animation clips, WebGL build) are marked DONE when only code infrastructure exists. Binary assets are missing.
 **Fix:** Split tasks into explicit "code" and "editor" subtasks. Tag editor-required subtasks. Use `DONE*` convention with clear notes about what remains.
+
+### Assembly Definition (.asmdef) Isolation Gaps
+**Source:** FlappyKookaburra (Phase 5-6)
+**Problem:** Adding new code directories (e.g., `Assets/Plugins/DOTween/`) without creating a matching `.asmdef` causes CS0246 "namespace not found" errors when existing assemblies try to reference the new code. The new code is invisible across assembly boundaries.
+**Fix:** When adding any new code directory that will be referenced by existing assemblies: (1) create a `.asmdef` in the new directory, (2) add it to the `references` list of all consuming `.asmdef` files. Always verify assembly references after adding new directories.
+
+### Opaque Placeholder Sprites
+**Source:** FlappyKookaburra (Phase 5-6)
+**Problem:** CLI-generated placeholder sprites created as solid-color rectangles appear as opaque blocks in-game, obscuring other sprites and looking obviously broken.
+**Fix:** Generate placeholder sprites with transparency and approximate shapes (ellipse for organic objects, rounded rectangle for UI elements). Use RGBA32 format with alpha channel. Fill only the shape interior, leave exterior pixels transparent.
+
+### Complex Art Rig Before Art Exists
+**Source:** FlappyKookaburra (Phase 5-6)
+**Problem:** Building a 5-part bird rig (body, 2 wings, tail, eye) with rotation-based animation before knowing the final art format. When real art arrived as a single sprite, the entire rig was scrapped in favor of simple scale animation.
+**Fix:** Implement the simplest viable animation first (scale-based squash/stretch). Only upgrade to complex rigs (multi-part, rotation-based) after confirming that decomposed art assets are available. Design the code to support both paths via strategy pattern or component swapping.
+
+### PPU (Pixels Per Unit) Assumptions
+**Source:** FlappyKookaburra (Phase 5-6)
+**Problem:** Real pixel art assets (784×1168px) imported at default PPU 100 result in sprites 7-8 world units wide — far too large for a game with camera orthographic size 5. PPU cannot be reliably set from CLI.
+**Fix:** (1) Document expected PPU values in known-issues and task specs. (2) Include PPU tuning as an explicit Editor-only subtask. (3) Consider adding runtime size assertions: `Debug.Assert(sr.bounds.size.x < maxExpectedSize)`. (4) Design GameSetup.cs to apply transform scale as a fallback when PPU can't be changed programmatically.
