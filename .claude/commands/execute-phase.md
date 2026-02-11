@@ -34,10 +34,27 @@ Batch 3: Tasks that depend on Batch 1+2 tasks
 Display the batch plan before executing:
 ```
 Phase {N} Execution Plan:
-  Batch 1 (parallel): T001, T008
-  Batch 2 (parallel): T002, T003, T004
-  Batch 3 (sequential): T005 → T006
+  Batch 1 (parallel): T001 [scaffold-agent/haiku], T008 [types-agent/sonnet]
+  Batch 2 (parallel): T002 [backend-agent/sonnet], T003 [frontend-agent/sonnet]
+  Batch 3 (sequential): T005 [infra-agent/sonnet] → T006 [test-agent/haiku]
+  Quality gate: haiku
 ```
+
+### 3.5. Cost Assessment
+
+Before executing, run the `cost-assessor` agent to estimate token usage and cost for this phase.
+
+Present the projection table to the user showing:
+- Per-task estimated tokens and cost by assigned model
+- Alternative costs if models were swapped
+- Total phase estimate
+
+**USER CHECKPOINT**: The user reviews the assessment and can:
+- **Approve** — proceed with current model assignments
+- **Override** — specify task:model pairs to change (e.g., "T005:opus, T008:haiku")
+- **Cancel** — abort phase execution
+
+If overrides are specified, update the task's agent invocation to use the overridden model.
 
 ### 4. Execute Each Batch
 For each batch, launch parallel Task agents:

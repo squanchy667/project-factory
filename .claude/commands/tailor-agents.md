@@ -73,11 +73,26 @@ Regardless of mode, customize the agent with:
 - Reference actual coding conventions from the codebase
 - Include build/test commands from the project
 
+#### 4e.5. Assign Model Tier
+
+Each generated agent gets a `model:` field in its YAML frontmatter. The template provides a default, but override based on the project's complexity profile:
+
+| Complexity Signal | Override Rule |
+|-------------------|---------------|
+| Task has 5+ subtasks or 8+ acceptance criteria | Upgrade haiku → sonnet |
+| Task involves cross-package coordination (3+ packages) | Upgrade haiku → sonnet |
+| Agent covers security-critical code (auth, payments, encryption) | Minimum sonnet |
+| Agent is scaffold-only (configs, boilerplate, directory creation) | Keep haiku |
+| Project has < 15 total tasks (simple project) | Downgrade sonnet → haiku for all except security |
+
+Preserve the template's frontmatter format with the resolved model.
+
 #### 4f. Quality Gate
 Validate each agent:
 - No `{{placeholders}}` remain — everything references actual project paths
 - Real file paths and schemas from the code repo
 - Code examples match project conventions
+- Valid YAML frontmatter with model: field (haiku, sonnet, or opus)
 - (Mode A only) Source attribution comment present
 
 Write to `{project-slug}/.claude/agents/{agent-name}.md`
@@ -129,13 +144,13 @@ Report formatted as a catalog:
 ## Agent Catalog for {ProjectName}
 
 ### Agents ({count})
-- agent-name.md — Description — RESEARCH (confidence) / TEMPLATE
+- agent-name.md — Description — RESEARCH/TEMPLATE — {model}
 - ...
 
 ### Research Summary
-| Agent | Mode | Top Source Score | Confidence |
-|-------|------|-----------------|------------|
-| {name} | RESEARCH / TEMPLATE | {X/10 or N/A} | HIGH / MEDIUM / LOW / N/A |
+| Agent | Mode | Top Source Score | Confidence | Model |
+|-------|------|-----------------|------------|-------|
+| {name} | RESEARCH / TEMPLATE | {X/10 or N/A} | HIGH / MEDIUM / LOW / N/A | haiku / sonnet / opus |
 
 ### Commands ({count})
 - /command-name — Description

@@ -1,6 +1,6 @@
 # Project Factory
 
-Meta-layer for building applications with Claude Code. Provides templates, schemas, a knowledge base, and 8 meta-commands that take a project from idea to production.
+Meta-layer for building applications with Claude Code. Provides templates, schemas, a knowledge base, and 9 meta-commands that take a project from idea to production. Every agent has a model tier (haiku/sonnet/opus) assigned via YAML frontmatter for cost-optimized execution.
 
 ## Quick Start
 
@@ -17,11 +17,12 @@ Runs the full 7-step protocol with user checkpoints between major phases. Can be
 ```
 1. /init-project "Name" type "description"   → Two repos (code + docs)
 2. /plan-project Name                        → Architecture + 20-80 tasks
-3. /tailor-agents Name                       → Project-specific .claude/ config
+3. /tailor-agents Name                       → Project-specific .claude/ config (model-routed)
 4. /generate-tests Name                      → Pre-implementation test suites
-5. /execute-phase 1 (repeat per phase)       → Implemented code per phase
-6. /sync-docs full                           → Docs ↔ code alignment
-7. /capture-learnings Name                   → Retrospective + pattern catalog
+5. /assess-phase N                           → Cost projection before building (optional)
+6. /execute-phase 1 (repeat per phase)       → Implemented code per phase
+7. /sync-docs full                           → Docs ↔ code alignment
+8. /capture-learnings Name                   → Retrospective + pattern catalog
 ```
 
 ## Architecture
@@ -57,23 +58,25 @@ The meta-layer itself lives at `.claude/` in the workspace root:
 
 ```
 .claude/
-├── commands/                     ← 8 meta-commands
+├── commands/                     ← 9 meta-commands
 │   ├── build-app.md
 │   ├── init-project.md
 │   ├── plan-project.md
 │   ├── tailor-agents.md
 │   ├── generate-tests.md
+│   ├── assess-phase.md
 │   ├── execute-phase.md
 │   ├── sync-docs.md
 │   └── capture-learnings.md
-├── agents/                       ← 7 meta-agents
-│   ├── project-planner.md
-│   ├── docs-generator.md
-│   ├── agent-researcher.md
-│   ├── agent-tailor.md
-│   ├── test-generator.md
-│   ├── phase-orchestrator.md
-│   └── quality-gate.md
+├── agents/                       ← 8 meta-agents (model tier in frontmatter)
+│   ├── project-planner.md        ← opus
+│   ├── docs-generator.md         ← haiku
+│   ├── agent-researcher.md       ← haiku
+│   ├── agent-tailor.md           ← sonnet
+│   ├── test-generator.md         ← sonnet
+│   ├── phase-orchestrator.md     ← haiku
+│   ├── quality-gate.md           ← haiku
+│   └── cost-assessor.md          ← haiku
 └── skills/                       ← 2 skills
     ├── task-management/SKILL.md
     └── docs-repo-patterns/SKILL.md
@@ -108,11 +111,12 @@ Can be interrupted and re-run — automatically resumes from the last completed 
 |---|-------|---------|-------|--------|
 | 1 | Birth | `/init-project` | Name, type, description | Two git repos (code + docs) |
 | 2 | Plan | `/plan-project` | Project name | PLAN.md, TASK_BOARD.md, 20-80 task specs |
-| 3 | Configure | `/tailor-agents` | Project name | Project-specific `.claude/` with agents, commands, skills |
+| 3 | Configure | `/tailor-agents` | Project name | Project-specific `.claude/` with model-routed agents |
 | 4 | Test | `/generate-tests` | Project name | Pre-implementation test suites from task specs |
-| 5 | Build | `/execute-phase` | Phase number | Implemented code with quality gates |
-| 6 | Maintain | `/sync-docs` | Sync mode | Docs ↔ code alignment |
-| 7 | Learn | `/capture-learnings` | Project name | Retrospective + pattern catalog updates |
+| 5 | Assess | `/assess-phase` | Phase number | Cost projection table (optional, standalone) |
+| 6 | Build | `/execute-phase` | Phase number | Implemented code with cost checkpoint + quality gates |
+| 7 | Maintain | `/sync-docs` | Sync mode | Docs ↔ code alignment |
+| 8 | Learn | `/capture-learnings` | Project name | Retrospective + pattern catalog updates |
 
 ### Step 1 — Birth (`/init-project`)
 
@@ -134,9 +138,12 @@ Uses the `project-planner` and `docs-generator` agents to produce:
 
 ### Step 3 — Configure (`/tailor-agents`)
 
-Uses the `agent-researcher` and `agent-tailor` agents to create the code repo's `.claude/` directory. For each agent role, the researcher searches online for cursor rules, Claude Code configs, and stack-specific conventions, then scores them. High-quality research is synthesized into agents (Mode A); when research is insufficient, local templates are used as fallback (Mode B).
+Uses the `agent-researcher` (haiku) and `agent-tailor` (sonnet) agents to create the code repo's `.claude/` directory. For each agent role, the researcher searches online for cursor rules, Claude Code configs, and stack-specific conventions, then scores them. High-quality research is synthesized into agents (Mode A); when research is insufficient, local templates are used as fallback (Mode B).
+
+Each generated agent gets a **model tier** (haiku/sonnet/opus) in its YAML frontmatter, assigned based on task complexity. Override by editing the `model:` field.
 
 - Agents enriched with battle-tested, version-specific conventions from online sources
+- Model tier assigned per complexity rules (scaffold→haiku, backend→sonnet, etc.)
 - Commands tailored to the project's tech stack
 - Skills with project-specific patterns
 - `CLAUDE.md` describing the project's stack and structure
@@ -153,17 +160,29 @@ Uses the `test-generator` agent to produce test files from task specs:
 
 **Prerequisites:** `/tailor-agents` (needs `.claude/CLAUDE.md` for test conventions).
 
-### Step 5 — Build (`/execute-phase`)
+### Step 5 — Assess (`/assess-phase`) *(optional)*
 
-Uses the `phase-orchestrator` agent to execute tasks in dependency order:
+Uses the `cost-assessor` agent (haiku, read-only) to estimate token cost before building:
+- Reads task specs and agent model assignments
+- Projects per-task token usage and cost
+- Shows upgrade/downgrade alternatives per task
+- No execution — assessment only
+
+**Prerequisites:** `/tailor-agents` (needs agent model assignments).
+
+### Step 6 — Build (`/execute-phase`)
+
+Uses the `phase-orchestrator` agent (haiku) to execute tasks in dependency order:
 - Computes execution batches from the dependency graph
-- Launches 3-5 parallel agents per batch
-- Runs `quality-gate` agent after each task
+- Runs cost assessment and presents a **user checkpoint** before execution
+- User can approve, override model assignments per task, or cancel
+- Launches 3-5 parallel agents per batch, each on its assigned model
+- Runs `quality-gate` agent (haiku) after each task
 - Updates TASK_BOARD.md with results
 
 **Prerequisites:** `/generate-tests` (recommended) or `/tailor-agents` (minimum).
 
-### Step 6 — Maintain (`/sync-docs`)
+### Step 7 — Maintain (`/sync-docs`)
 
 Keeps documentation synchronized with the codebase:
 - `full` — Complete docs refresh
@@ -173,7 +192,7 @@ Keeps documentation synchronized with the codebase:
 
 **Prerequisites:** Some implementation exists to document.
 
-### Step 7 — Learn (`/capture-learnings`)
+### Step 8 — Learn (`/capture-learnings`)
 
 Extracts patterns and insights from a completed project:
 - Produces a retrospective document in the knowledge base
@@ -184,15 +203,16 @@ Extracts patterns and insights from a completed project:
 
 ## Meta-Agents Reference
 
-| Agent | Mission | Invoked By |
-|-------|---------|------------|
-| `project-planner` | Design architecture and decompose into phased tasks | `/plan-project` |
-| `docs-generator` | Create GitBook-compatible documentation structure | `/plan-project`, `/sync-docs` |
-| `agent-researcher` | Search online for best-practice coding configs, evaluate quality, produce research reports | `/tailor-agents` |
-| `agent-tailor` | Synthesize research or customize templates into project-specific agents | `/tailor-agents` |
-| `test-generator` | Generate test files from task acceptance criteria | `/generate-tests` |
-| `phase-orchestrator` | Execute task batches with dependency ordering | `/execute-phase` |
-| `quality-gate` | Validate task completion against acceptance criteria | `/execute-phase` |
+| Agent | Model | Mission | Invoked By |
+|-------|-------|---------|------------|
+| `project-planner` | opus | Design architecture and decompose into phased tasks | `/plan-project` |
+| `agent-tailor` | sonnet | Synthesize research or customize templates into project-specific agents | `/tailor-agents` |
+| `test-generator` | sonnet | Generate test files from task acceptance criteria | `/generate-tests` |
+| `agent-researcher` | haiku | Search online for best-practice coding configs, evaluate quality | `/tailor-agents` |
+| `phase-orchestrator` | haiku | Execute task batches with dependency ordering | `/execute-phase` |
+| `quality-gate` | haiku | Validate task completion against acceptance criteria | `/execute-phase` |
+| `docs-generator` | haiku | Create GitBook-compatible documentation structure | `/plan-project`, `/sync-docs` |
+| `cost-assessor` | haiku | Estimate token usage and cost for a phase | `/assess-phase`, `/execute-phase` |
 
 ## Skills Reference
 
@@ -234,16 +254,16 @@ Each type has a starter in `templates/code/{type}/` with project scaffolding, co
 
 ### Claude Config Templates
 
-Agent role templates (`templates/claude-config/agents/`):
-- `scaffold-agent` — Project setup and boilerplate
-- `types-agent` — Schema and type design
-- `backend-agent` — API routes and services
-- `frontend-agent` — UI components and hooks
-- `llm-agent` — LLM integration
-- `infra-agent` — Infrastructure and deployment
-- `test-agent` — Testing
-- `security-agent` — Security hardening
-- `docs-agent` — Documentation
+Agent role templates (`templates/claude-config/agents/`), each with a default model tier:
+- `scaffold-agent` — Project setup and boilerplate — **haiku**
+- `types-agent` — Schema and type design — **sonnet**
+- `backend-agent` — API routes and services — **sonnet**
+- `frontend-agent` — UI components and hooks — **sonnet**
+- `llm-agent` — LLM integration — **sonnet**
+- `infra-agent` — Infrastructure and deployment — **sonnet**
+- `test-agent` — Testing — **haiku**
+- `security-agent` — Security hardening — **sonnet**
+- `docs-agent` — Documentation — **haiku**
 
 Command templates (`templates/claude-config/commands/`):
 - `task-execute` — Universal task execution workflow
@@ -261,7 +281,7 @@ Skill templates (`templates/claude-config/skills/`):
 
 Proven patterns extracted from completed projects, organized by category:
 - **Architecture Patterns** — Zod-first validation, config-driven agents, monorepo workspaces, etc.
-- **Process Patterns** — Phased execution, documentation-first planning, test-first execution, etc.
+- **Process Patterns** — Phased execution, documentation-first planning, test-first execution, model routing for cost optimization, etc.
 - **Agent Patterns** — Specialized agents, convention-heavy prompts, skills for context
 - **Code Patterns** — Barrel exports, SSE streaming, ScriptableObjects
 - **Anti-Patterns** — Generic prompts, over-constrained dependencies, skipping quality gates
@@ -284,9 +304,10 @@ Post-project analyses for completed projects:
 ### Adding a New Agent Template
 
 1. Create template: `templates/claude-config/agents/{agent-name}.md`
-2. Follow the Mission → Workflow → Quality Standards structure
-3. Include `{{placeholder}}` variables for project-specific customization
-4. Add the agent type to the mapping in `agent-tailor.md`
+2. Add YAML frontmatter with `model:` (haiku/sonnet/opus) and `tools:` fields
+3. Follow the Mission → Workflow → Quality Standards structure
+4. Include `{{placeholder}}` variables for project-specific customization
+5. Add the agent type to the mapping in `agent-tailor.md`
 
 ### Adding a New Pattern
 

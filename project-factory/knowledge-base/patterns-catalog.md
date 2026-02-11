@@ -103,6 +103,15 @@ export type User = z.infer<typeof UserSchema>;
 **Pattern:** Before falling back to local templates, search online for cursor rules, Claude Code configs, and stack-specific conventions. Score each source on Specificity (1-5) and Relevance (1-5). If 2+ independent sources score >= 7/10 combined, synthesize the best patterns into the agent (Mode A). Otherwise, fall back to local templates (Mode B). The synthesis algorithm takes the structure skeleton from the highest-scored source, merges conventions as a deduplicated union, and resolves conflicts by: project code > higher score > more specific > more recent. Research-sourced agents include `<!-- Research Sources: ... -->` attribution for traceability.
 **When to use:** Always during `/tailor-agents` — research is the default path, templates are the fallback. Especially valuable for mainstream stacks (React, Next.js, Express, Unity) where high-quality public configs exist.
 
+### Model Routing for Cost Optimization
+**Source:** Project Factory
+**Context:** Multi-agent pipeline with varying task complexity
+**Pattern:** Assign model tiers (haiku/sonnet/opus) via YAML frontmatter in agent files. Match model capability to task complexity: haiku for algorithmic/template work (scaffold, docs, quality gate, orchestration), sonnet for standard implementation (backend, frontend, types, security, infra), opus only for architecture design (project planner). Run a cost-assessor agent (haiku, read-only) before each phase to project token usage and present a cost table with upgrade/downgrade alternatives. User reviews and can override model assignments per task before execution begins.
+**Distribution:** Meta-layer: 1 opus, 2 sonnet, 4 haiku. Templates: 0 opus, 5 sonnet, 4 haiku.
+**Override rules:** Upgrade haiku→sonnet if task has 5+ subtasks, 8+ criteria, cross-package coordination, or security-critical code. Downgrade sonnet→haiku for simple projects (<15 tasks) except security agents.
+**Impact:** ~72% savings vs all-Opus, ~23% savings vs all-Sonnet baseline.
+**When to use:** All projects using the `/build-app` pipeline. The cost-assessor adds negligible overhead (~$0.05 per phase).
+
 ---
 
 ## Code Patterns
