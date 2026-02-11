@@ -2,6 +2,8 @@
 
 A meta-layer for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) that turns a one-line idea into a fully implemented, documented, and tested application. It provides 9 slash commands, 8 specialized agents, reusable templates, and a knowledge base of proven patterns — all orchestrated through a single `/build-app` command.
 
+**New here?** Read the [User Guide](GUIDE.md) for a friendly, start-to-finish walkthrough.
+
 ## What It Does
 
 You describe an app. Project Factory handles the rest:
