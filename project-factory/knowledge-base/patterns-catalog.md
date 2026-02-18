@@ -51,7 +51,7 @@ export type User = z.infer<typeof UserSchema>;
 ## Process Patterns
 
 ### Phased Task Execution
-**Source:** ChatAgent, TarotBattlegrounds, FlappyKookaburra
+**Source:** ChatAgent, TarotBattlegrounds, FlappyKookaburra, AgentTailor
 **Context:** Large projects requiring systematic implementation
 **Pattern:** Break project into phases (Foundation → Core → Integration → Production). Each phase has tasks with dependency tracking. Tasks within a phase run in parallel batches. Before batching, cross-reference "Files to Create/Modify" to detect file conflicts — tasks touching the same file must be sequenced.
 **Optimal batch size:** 3-5 concurrent agents.
@@ -136,8 +136,51 @@ export type User = z.infer<typeof UserSchema>;
 **Pattern:** Server-Sent Events (SSE) for streaming LLM responses. Set Content-Type to text/event-stream. Stream chunks as JSON-encoded data events. Extended in v2 with block-typed events (form blocks, flow_complete events).
 **When to use:** Chat applications with LLM-powered responses.
 
+### Multi-Stage Intelligence Pipeline with Graceful Degradation
+**Source:** AgentTailor
+**Context:** Systems that assemble context from multiple sources (documents, web, vector stores)
+**Pattern:** Design the pipeline as independent modules connected by an orchestrator. Each module: (1) has its own Zod I/O schemas, (2) is wrapped in try/catch in the orchestrator, (3) has a meaningful fallback value. The orchestrator never returns empty results. Pipeline: analyze → budget → retrieve → gaps → (web search) → compress → synthesize → format.
+```typescript
+// Each stage has fallback
+let gapReport: GapReport;
+try {
+  gapReport = detectGaps(taskAnalysis, scoredChunks);
+} catch (err) {
+  console.warn('[orchestrator] detectGaps failed:', err);
+  gapReport = { gaps: [], overallCoverage: 0.5, isActionable: false };
+}
+```
+**When to use:** Any system that assembles data from multiple sources into a unified output.
+
+### Hierarchical Context Compression
+**Source:** AgentTailor
+**Context:** Reducing large document context to fit within LLM token budgets
+**Pattern:** Score chunks by relevance, then apply compression levels based on score thresholds: FULL (>0.8, verbatim), SUMMARY (0.5-0.8, LLM-generated summary), KEYWORDS (0.3-0.5, key terms only), REFERENCE (<0.3, first sentence). Token budget drives aggressiveness. Sweet spot ratio: 0.2-0.5 output/input.
+**When to use:** Any system that needs to pack maximum value into a limited context window.
+
+### Weighted Multi-Dimensional Quality Scoring
+**Source:** AgentTailor
+**Context:** Evaluating assembled output quality across multiple dimensions
+**Pattern:** Define 2-5 sub-scores as pure functions (0-1 each). Assign weights summing to 1.0. Generate actionable suggestions for any sub-score below threshold. Store weights as shared constants. Expose both overall score and sub-scores in API response.
+```typescript
+const WEIGHTS = { coverage: 0.35, relevance: 0.30, diversity: 0.20, compression: 0.15 };
+const overall = Object.entries(WEIGHTS).reduce((sum, [key, weight]) => sum + subScores[key] * weight, 0);
+```
+**When to use:** Any system that needs transparent quality metrics (search quality, recommendation quality, context quality).
+
+### Redis Fail-Open Rate Limiting
+**Source:** AgentTailor
+**Context:** SaaS applications with tiered pricing and usage limits
+**Pattern:** Redis INCR + EXPIRE for atomic daily counter. Key: `ratelimit:{userId}:{YYYY-MM-DD}`. Always set X-RateLimit-Limit/Remaining/Reset headers. On Redis unavailability, allow requests through (fail-open). Separate rate limiting (daily count) from structural enforcement (max projects, max docs) into distinct middleware.
+```typescript
+const count = await redis.incr(key);
+if (count === 1) await redis.expire(key, secondsUntilMidnight);
+if (count > limit) return res.status(429).json({ error: 'Rate limit exceeded', rateLimit: info });
+```
+**When to use:** Any SaaS with tiered plans. Fail-open is correct for rate limiting — availability beats strictness.
+
 ### Non-Fatal Pipeline Stages
-**Source:** ChatAgent v2
+**Source:** ChatAgent v2, AgentTailor
 **Context:** Adding new processing stages to an existing pipeline
 **Pattern:** When extending a pipeline (e.g., adding vector indexing after file upload), wrap the new stage in try/catch so the primary operation always completes. Log the failure for debugging but don't block the user-facing result.
 ```typescript
@@ -354,6 +397,16 @@ public void LoadMode(GameModeData mode) {
 **Source:** ChatAgent v2
 **Problem:** All 80 v2 tasks remained PENDING in the task board until final sync, even though 15 batches had been committed. Anyone checking the board would think no work was done.
 **Fix:** Update task statuses after each batch commit. If using batch execution, mark all tasks in the batch as DONE in the same session. Consider automating this via a post-commit hook or a `/sync-docs tasks` command.
+
+### Zod .default() Creates Required Fields
+**Source:** AgentTailor
+**Problem:** `z.boolean().default(true)` infers TypeScript type `boolean` (required), not `boolean | undefined`. When constructing objects manually (not via `.parse()`), TypeScript requires the field — even though Zod would provide a default during parsing.
+**Fix:** When a Zod schema has `.default()` fields and objects are constructed manually elsewhere, include the default value explicitly. Or use `.optional().default(true)` which infers `boolean | undefined` before parsing but `boolean` after.
+
+### Assuming External Dependencies Exist
+**Source:** AgentTailor
+**Problem:** T034 (GPT auth) assumed a Prisma `ApiKey` model existed because the task spec mentioned "API key validation." The model didn't exist — no migration, no table. Required a full rewrite to env-var-based auth.
+**Fix:** Before implementing any task, verify: (1) Prisma models referenced in the spec exist in `schema.prisma`, (2) npm packages are installed at the expected version, (3) external API types match current signatures. A 30-second check prevents a 10-minute rewrite.
 
 ### Test Files in Production Build
 **Source:** ChatAgent v2
