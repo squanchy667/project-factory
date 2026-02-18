@@ -18,6 +18,30 @@
 - **Characters**: 4 with distinct stats via CharacterData SO (Soprano, Tenor, Baritone, Bass)
 - **Input**: Unity Input System with 4 control schemes (2 keyboard + 2 gamepad)
 
+## Planned vs Actual Execution
+
+### Batch Strategy
+The `development-agents.md` planned **10 batches with cross-phase parallelism** — e.g., Batch 3 combined T003 (Phase 1) with T006, T009 (Phase 2); Batch 5 combined T010 (Phase 2) with T014, T021 (Phase 3/5).
+
+Actual execution used **12 batches with strict per-phase boundaries**. Each phase had a user approval checkpoint before starting.
+
+| Aspect | Planned | Actual |
+|--------|---------|--------|
+| Total batches | 10 | 12 |
+| Cross-phase batching | Yes (3 cross-phase batches) | No (strict phase boundaries) |
+| Max parallel agents | 5 | 5 |
+| User checkpoints | Not specified | 6 (one per phase) |
+
+### Why the Difference
+Strict per-phase execution added 2 extra sequential steps but was cleaner:
+- No cross-phase dependency confusion
+- User review at each phase boundary caught issues early
+- Simpler mental model for orchestration
+- No risk of executing Phase N+1 tasks before Phase N quality gate
+
+### Verdict
+**Strict per-phase execution is the better default** for `/build-app`. Cross-phase batching saves ~2 batch cycles but adds orchestration complexity. Reserve cross-phase parallelism for projects with 50+ tasks where the time savings justify the complexity.
+
 ## What Worked Well
 
 ### 1. All-Parallel Final Phases
@@ -48,6 +72,33 @@ Each system was built and tested in isolation. Cross-system integration (e.g., d
 
 ### 3. BounceWall Dual-Mode Complexity
 BounceWall toggles the same CircleCollider2D between trigger (fall detection) and solid (bounce). This shared collider approach works but is fragile — consider separate GameObjects for fall boundary vs bounce wall in future projects.
+
+## Agent Effectiveness
+
+| Agent Type | Tasks | Model | First-Try Success | Notes |
+|-----------|-------|-------|-------------------|-------|
+| scaffold | 1 (T001) | haiku | 100% | Created directory structure, packages, assembly defs |
+| systems | 9 (T002-T005, T010-T012, T014-T015) | sonnet | 100% | Most prolific — handled all managers and core systems |
+| gameplay | 9 (T006-T009, T013, T016-T019) | sonnet | 100% | Player mechanics, spotlight, all 4 game modes |
+| content | 1 (T020) | haiku | 100% | Character definitions — simple SO data, haiku sufficient |
+| ui | 5 (T021-T025) | sonnet | 100% | All UI screens including complex CharacterSelect |
+| vfx | 2 (T026-T027) | sonnet | 100% | Particle pooling, camera shake, slow-motion |
+| art | 2 (T028, T030) | sonnet | 100% | Character animations, UI theme and polish |
+| audio | 1 (T029) | sonnet | 100% | AudioManager with 8-source pool, AudioLibrary SO |
+
+### Observations
+- **100% first-try success** across all 30 tasks — no retries needed
+- **Full-code prompts** are the key factor: agents received complete implementations, not just specs
+- **systems** and **gameplay** were the workhorses (9 tasks each, 60% of all work)
+- **haiku** was sufficient for scaffold and content (simple, template-like tasks)
+- **sonnet** was appropriate for all implementation agents — no task warranted opus
+- **Model cost efficiency**: 2 haiku tasks + 28 sonnet tasks ≈ $4.14 total
+
+### Recommendations for Future Unity Projects
+- Keep **scaffold** and **content** on haiku — they write boilerplate/data, not complex logic
+- **systems** and **gameplay** should stay sonnet — they implement stateful managers
+- Consider **haiku for game mode agents** if full code is provided in the prompt (T016-T019 were essentially "write this file" tasks)
+- No need for opus in unity-game projects when using full-code prompts
 
 ## Patterns to Catalog
 
@@ -100,6 +151,14 @@ CharacterSelectUI manages 4 PlayerSlotUI instances, each with 3 states (Empty �
 | UI | 10 | ~1,100 |
 | Utils (EventBus, VFX, Physics) | 5 | ~475 |
 
+## Template Candidates
+
+1. **unity-game-multiplayer overlay** — KingOfOpera + FlappyKookaburra establish a clear pattern for Unity 2D games. A multiplayer-specific overlay could add: PlayerManager with join/spawn/respawn, Input System with multiple control schemes, character select UI pattern, game mode framework. *Flag for review — don't auto-create.*
+
+2. **Mode-Modifier agent template** — A reusable agent prompt pattern for games with multiple modes. The agent receives the GameModeManager interface and a mode spec, outputs a GameModeData SO + mode-specific script. Could reduce mode implementation to a fill-in-the-blanks template. *Flag for review.*
+
+3. **UI-Screen agent template** — The 5 UI tasks (T021-T025) all followed the same pattern: subscribe to events, update display, handle input. A generic UI-screen agent with the EventBus contract and Canvas hierarchy conventions could work across Unity projects. *Flag for review.*
+
 ## Lessons for Future Unity Projects
 
 1. **Provide full code in agent prompts** for unity-game projects — agents can't run/test code, so reducing ambiguity in the prompt produces better first-pass results
@@ -107,3 +166,6 @@ CharacterSelectUI manages 4 PlayerSlotUI instances, each with 3 states (Empty �
 3. **Max parallelism in content/polish phases** — game modes, UI screens, and VFX/audio are naturally independent
 4. **SO runtime factories** are essential for CLI-only development — always provide `CreateDefault*()` methods
 5. **Single-session completion** is achievable for 30-task Unity games when agents receive detailed prompts with code
+6. **Strict per-phase execution > cross-phase batching** for `/build-app` — simpler orchestration, user review checkpoints, 2 extra batches is a worthwhile trade
+7. **8 agent types is the sweet spot** for 30-task Unity games — more granular than FlappyKookaburra (7), less fragmented than TarotBattlegrounds (16)
+8. **100% first-try with full-code prompts** validates the pattern — invest time in detailed task specs with complete code, save time on retries
