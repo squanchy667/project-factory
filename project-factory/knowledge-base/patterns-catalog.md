@@ -343,6 +343,43 @@ public void LoadMode(GameModeData mode) {
 **Pattern:** Agents only write files — no git operations. The orchestrator commits after each batch completes. This eliminates branch contention entirely. Combined with file-conflict detection before batching (tasks in same batch must create distinct files).
 **When to use:** Always when running parallel agents on a single git repo.
 
+### Dual-Pipeline Architecture (Shared Infrastructure)
+**Source:** AgentTailor v1.2
+**Context:** Platform that needs two distinct capabilities sharing common infrastructure
+**Pattern:** Two pipelines (Context Assembly + Agent Factory) share infrastructure (doc processing, vector DB, scoring, compression, web search) but each has its own orchestrator, API routes, and output format. Pipeline A produces formatted context for conversations. Pipeline B produces agent definition files. Neither pipeline modifies the other's code — they share read-only service modules.
+**When to use:** When adding a major new capability to an existing platform that can reuse existing processing infrastructure.
+
+### Config Discovery + Dual-Axis Scoring
+**Source:** AgentTailor v1.2
+**Context:** Finding and evaluating external configuration sources (agent configs, rules files, prompts)
+**Pattern:** Generate tiered search queries (Tier 1: exact format matches like `site:github.com .cursorrules {stack}`, Tier 2: convention patterns, Tier 3: broad role+stack). Parse discovered configs into normalized schema. Score on two independent axes: Specificity (1-5, concrete conventions vs vague platitudes) and Relevance (1-5, stack/domain/role match). Combined threshold >= 7/10 for inclusion. Assess confidence from source count and diversity.
+```typescript
+// Specificity based on concrete content
+const specificity = Math.min(5, 1 + (conventions.length > 5 ? 1 : 0) + (examples.length > 0 ? 1 : 0) + (tools.length > 0 ? 1 : 0) + (filePatterns.length > 0 ? 1 : 0));
+// Relevance based on stack/domain/role overlap
+const stackMatchRatio = matchingStackItems / totalRequiredStack;
+const relevance = Math.min(5, 1 + stackMatchRatio * 2 + domainMatch + roleOverlap);
+```
+**When to use:** Any system that aggregates external configuration or knowledge sources with quality thresholds.
+
+### Format-Agnostic Generation + Multi-Format Export
+**Source:** AgentTailor v1.2
+**Context:** Generating output that targets multiple platform-specific formats
+**Pattern:** Generate into an internal canonical format (AgentConfig with conventions[], tools[], model, mission), then export to platform-specific formats via a format exporter. Each format has its own structure: Claude Code → YAML frontmatter + markdown sections, Cursor → flat text with conventions, System Prompt → role + instructions + context. Adding a new format only requires a new export function.
+**When to use:** Any generator that must output to multiple platform-specific formats.
+
+### Prisma JSON Column Type Workaround
+**Source:** AgentTailor v1.2
+**Context:** Storing complex TypeScript objects in Prisma `Json` columns
+**Pattern:** Prisma's `Json` type (`InputJsonValue`) doesn't accept TypeScript objects with complex types (branded types, unions, nested objects with specific shapes). Wrap with `JSON.parse(JSON.stringify(obj))` to convert to plain JSON that Prisma accepts. This is a serialization round-trip that strips TypeScript type information.
+```typescript
+// Fails: Prisma rejects complex TypeScript objects
+await prisma.agentSession.create({ data: { requirement: complexObj } });
+// Works: JSON round-trip produces plain object
+await prisma.agentSession.create({ data: { requirement: JSON.parse(JSON.stringify(complexObj)) } });
+```
+**When to use:** Any Prisma model with `Json` columns that store complex typed objects.
+
 ---
 
 ## Anti-Patterns (What NOT to Do)
@@ -412,6 +449,16 @@ public void LoadMode(GameModeData mode) {
 **Source:** ChatAgent v2
 **Problem:** Test files using `import.meta.url` or Vitest-specific imports caused TypeScript compilation errors (`TS1470: 'import.meta' not allowed in CommonJS output`) when included in the production tsconfig.
 **Fix:** Exclude test files from all workspace tsconfigs from the start: `"exclude": ["*.test.ts", "src/**/*.test.ts"]`. Vitest uses its own config and doesn't need these tsconfigs. Establish this pattern in the project scaffold, not as a retroactive fix.
+
+### TypeScript `as const` Then Reassignment
+**Source:** AgentTailor v1.2
+**Problem:** Using `{ level: 'low' as const }` then later reassigning `confidence.level = 'medium'` fails — `as const` narrows to literal type `'low'`, and `'medium'` is not assignable. Similarly, `let x = { level: 'low' as const }` means `x.level` is `'low'`, not `string`.
+**Fix:** Use an explicit union type annotation instead of `as const`: `let confidence: { level: 'high' | 'medium' | 'low'; score: number }`. Only use `as const` for truly immutable values.
+
+### Domain Union Type vs String Comparison
+**Source:** AgentTailor v1.2
+**Problem:** A function returns `KnowledgeDomain[]` (union of literal string types), but when comparing with user input (a plain `string`), `Array.includes(userString)` fails because TypeScript's `includes()` signature requires the argument type to match the array element type.
+**Fix:** Cast the typed array to `string[]` before calling `includes()`: `(classifyDomains(text) as string[]).includes(userInput)`. Alternatively, use `.some(d => d === userInput)` with a type predicate.
 
 ### PPU (Pixels Per Unit) Assumptions
 **Source:** FlappyKookaburra (Phase 5-6)

@@ -128,6 +128,60 @@ Separate middleware for rate limiting (daily request count) vs structural limits
 
 4. **quality-scorer utility**: The weighted multi-dimensional scorer pattern (sub-scorers + weights + suggestions) is reusable beyond context quality — could apply to search result quality, recommendation quality, etc.
 
+## v1.2 Update — Agent Factory Pivot
+
+### Overview
+
+Post-v1.0 completion, AgentTailor was extended with a second pipeline (Agent Factory) that creates specialized AI agents by combining curated/discovered online configs with project documentation. This was a single-session implementation adding 31 new files and modifying 9 existing files in one atomic commit (4,330 lines).
+
+### Pivot Stats
+
+| Field | Value |
+|-------|-------|
+| **New files** | 31 |
+| **Modified files** | 9 |
+| **Lines added** | 4,330 |
+| **Packages touched** | All 6 (shared, server, dashboard, extension, mcp-server) |
+| **Existing tests** | 162 still passing |
+| **Typecheck** | Clean across all packages |
+
+### New Modules
+
+| Module | Location | Purpose |
+|--------|----------|---------|
+| 5 Zod schemas | `shared/src/schemas/agent*.ts, config*.ts` | AgentRequirement, AgentConfig, ConfigSource, ConfigTemplate, AgentSession |
+| 3 Prisma models | `server/prisma/schema.prisma` | AgentConfig, ConfigTemplate, AgentSession + AgentFormat enum |
+| Config parser | `server/src/services/configParser.ts` | Normalize Claude Code/Cursor/System Prompt formats |
+| Config discovery | `server/src/services/configDiscovery.ts` | Tiered web search for proven configs |
+| Config scorer | `server/src/services/configScorer.ts` | Specificity + Relevance dual-axis scoring |
+| Config library | `server/src/services/configLibrary.ts` | Curated index with CRUD + search |
+| Agent generator | `server/src/services/agentGenerator.ts` | Merge configs + project docs → agent |
+| Format exporter | `server/src/services/formatExporter.ts` | Export to Claude/.cursorrules/prompt |
+| Agent orchestrator | `server/src/services/agentOrchestrator.ts` | 10-step pipeline |
+| Agent quality scorer | `server/src/services/agentQualityScorer.ts` | 4-dimension quality assessment |
+| API routes | `server/src/routes/agents.ts, configs.ts` | 9 new endpoints |
+| Dashboard | 3 pages + 6 components + 2 hooks | Agent Builder, Config Library, Agent Detail |
+| Extension | `extension/src/sidepanel/components/AgentBuilder.tsx` | Sidepanel Agent tab |
+| MCP tools | `mcp-server/src/tools/generate*.ts, browse*.ts, export*.ts` | 3 new tools |
+
+### Pivot-Specific Learnings
+
+1. **Module reuse across pipelines works well**: taskAnalyzer, contextCompressor, qualityScorer, sourceSynthesizer, domainClassifier — all extended for Pipeline B without modifying Pipeline A behavior. The graceful degradation pattern meant adding new callers was safe.
+
+2. **Single-commit pivots on mature codebases**: With 162 existing tests as a safety net, adding 4,330 lines in one atomic commit was practical. The typecheck and test suite caught zero regressions, confirming the architecture's modularity.
+
+3. **Prisma JSON column typing**: Complex TypeScript objects (e.g., `AgentRequirementAnalysis`) don't satisfy Prisma's `InputJsonValue` type. The fix is `JSON.parse(JSON.stringify(obj))` — ugly but reliable. This is a recurring Prisma gotcha.
+
+4. **TypeScript const assertion then reassignment**: `{ level: 'low' as const }` then later `confidence.level = 'medium'` fails because `as const` narrows to literal type. Need explicit union type annotation: `let confidence: { level: 'high' | 'medium' | 'low'; ... }`.
+
+5. **KnowledgeDomain union type vs string comparison**: `classifyDomains()` returns `KnowledgeDomain[]` (union of literal strings), but when comparing with user input (a plain `string`), TypeScript rejects `Array.includes()`. Cast result as `string[]`.
+
+6. **Dual-axis config scoring is effective**: Specificity (conventions, code examples, tools) + Relevance (stack match, domain match, role overlap) as independent 1-5 axes with combined >= 7/10 threshold creates a clear quality gate. Easy to explain, easy to debug.
+
+### Agent Effectiveness (v1.2)
+
+The entire Agent Factory pivot was implemented by a single orchestrated session (no specialized agents), which validates the pattern that **mature codebases with strong conventions don't need specialized agents for extensions** — the conventions skill and existing patterns are sufficient.
+
 ## Recommendations for Similar Projects
 
 1. **Start with Zod schemas**: Define all shared types in a shared package with Zod before writing any business logic. The type safety payoff is immediate.
