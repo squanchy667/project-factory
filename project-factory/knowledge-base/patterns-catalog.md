@@ -57,6 +57,14 @@ export type User = z.infer<typeof UserSchema>;
 **Optimal batch size:** 3-5 concurrent agents.
 **When to use:** Any project with more than 10 tasks.
 
+### Batch-Based Sequential Execution
+**Source:** ChatAgent v2
+**Context:** Large upgrades (50+ tasks) on an established codebase with strong conventions
+**Pattern:** Instead of per-task feature branches with parallel agents, execute tasks in sequential batches (4-8 tasks each) on a single branch. Each batch is a coherent commit grouping by implementation affinity, not strictly by phase number. Run typecheck + tests after every batch as a quality gate. Commit only when both pass.
+**Benefits:** Zero git conflicts, clean bisectable history, no agent coordination overhead.
+**Prerequisite:** Mature CLAUDE.md with strong conventions, supporting crew (agents, skills, commands) already established.
+**When to use:** When one well-configured session handles execution (not parallel agents). Especially for upgrade/expansion work on existing codebases.
+
 ### Documentation-First Planning
 **Source:** ChatAgent, TarotBattlegrounds
 **Context:** Projects that benefit from upfront architecture design
@@ -125,8 +133,56 @@ export type User = z.infer<typeof UserSchema>;
 ### SSE Streaming for LLM Responses
 **Source:** ChatAgent
 **Context:** Real-time AI chat interfaces
-**Pattern:** Server-Sent Events (SSE) for streaming LLM responses. Set Content-Type to text/event-stream. Stream chunks as JSON-encoded data events.
+**Pattern:** Server-Sent Events (SSE) for streaming LLM responses. Set Content-Type to text/event-stream. Stream chunks as JSON-encoded data events. Extended in v2 with block-typed events (form blocks, flow_complete events).
 **When to use:** Chat applications with LLM-powered responses.
+
+### Non-Fatal Pipeline Stages
+**Source:** ChatAgent v2
+**Context:** Adding new processing stages to an existing pipeline
+**Pattern:** When extending a pipeline (e.g., adding vector indexing after file upload), wrap the new stage in try/catch so the primary operation always completes. Log the failure for debugging but don't block the user-facing result.
+```typescript
+// Non-fatal: vector indexing failure doesn't block file processing
+try {
+  await indexFileChunks(fileId, text, metadata);
+} catch (err) {
+  log.error('Vector indexing failed', { fileId, error: (err as Error).message });
+}
+file.status = 'ready'; // Always mark ready
+```
+**When to use:** Any pipeline where a new stage is additive and the primary operation should never fail because of it.
+
+### Hebrew-Aware Regex Patterns
+**Source:** ChatAgent v2
+**Context:** Multilingual keyword matching (Hebrew + Latin)
+**Pattern:** JavaScript `\b` word boundaries only work with ASCII word characters `[a-zA-Z0-9_]`. Hebrew characters are non-word characters, so `\b(חוזה)\b` never matches. Additionally, Hebrew prefix letters (ה,ל,ב,מ,כ,ו,ש) attach directly without spaces. Fix: split patterns into Latin (with `\b`) and Hebrew (without boundaries) using alternation.
+```typescript
+// Before (broken for Hebrew):
+{ pattern: /\b(invoice|חשבונית)\b/i, agentId: 'finance-agent' }
+// After (works for both):
+{ pattern: /\b(invoice|expense)\b|(חשבונית|הוצאה|תקציב)/i, agentId: 'finance-agent' }
+```
+**When to use:** Any regex keyword matching that must support non-Latin scripts.
+
+### CSS Logical Properties for RTL
+**Source:** ChatAgent v2
+**Context:** Bilingual web apps (LTR + RTL)
+**Pattern:** Use CSS logical properties instead of directional ones: `inset-inline-end` (not `right`), `border-inline-start` (not `border-left`), `padding-inline` (not `padding-left/right`), `margin-inline-start` (not `margin-left`). Combined with `dir="rtl"` on the HTML element, layout automatically mirrors without separate stylesheets.
+**When to use:** Any web app that supports or may support RTL languages.
+
+### Module-Level Config via Lazy Getters
+**Source:** ChatAgent v2
+**Context:** Module-level constants read from environment variables
+**Pattern:** Avoid `const X = process.env.X || default` at module level — the value is cached at import time, making runtime reconfiguration impossible and breaking test stubs. Use a getter function or lazy initialization instead.
+```typescript
+// Bad: cached at import time, vi.stubEnv won't work
+const DIMENSION = parseInt(process.env.EMBEDDING_DIMENSION || '256');
+
+// Good: evaluated on each call
+function getDimension(): number {
+  return parseInt(process.env.EMBEDDING_DIMENSION || '256');
+}
+```
+**When to use:** Any module that reads environment variables and needs testability or runtime reconfiguration.
 
 ### ScriptableObjects for Data
 **Source:** TarotBattlegrounds, FlappyKookaburra
@@ -205,6 +261,45 @@ if (_deathSequence != null) {
 ```
 **When to use:** When layering premium visual/UI features onto a working base game.
 
+### Mode-Modifier Architecture (Unity)
+**Source:** KingOfOpera
+**Context:** Unity party games with multiple game modes that modify physics/gameplay
+**Pattern:** Game modes don't implement their own physics — they set multipliers on a central GameModeManager that other systems query. Mode definitions are ScriptableObjects with knockback/speed multipliers and boolean toggles (spotlight, elimination, bouncy walls). GameModeManager.LoadMode() applies all modifiers and configures dependent systems.
+```csharp
+// GameModeData SO defines the rules
+public float knockbackMultiplier = 1.0f;
+public bool spotlightEnabled = true;
+public bool eliminationEnabled = true;
+
+// GameModeManager applies them
+public void LoadMode(GameModeData mode) {
+    KnockbackMultiplier = mode.knockbackMultiplier;
+    SpeedMultiplier = mode.speedMultiplier;
+    SpotlightManager.Instance?.Activate(mode.spotlightPattern);
+    FallDetector.Instance.enabled = mode.eliminationEnabled;
+}
+```
+**When to use:** Games with multiple modes that share core mechanics but modify parameters.
+
+### Score Attribution Chain
+**Source:** KingOfOpera
+**Context:** Party games where the player who caused a fall should get credit
+**Pattern:** Use a LastAttackerId chain: (1) PlayerHitEvent → ScoreManager records last attacker on victim, (2) PlayerFellOffEvent → ScoreManager credits LastAttackerId with knock-off points. This cleanly separates hit detection from fall attribution.
+**When to use:** Games with indirect causation chains (A hits B, B falls off, A gets credit).
+
+### Full-Code Agent Prompts (Unity)
+**Source:** KingOfOpera
+**Context:** Unity CLI-only development where agents can't compile or test
+**Pattern:** Provide complete implementation code in agent prompts rather than just specifications. Agents write files with minimal exploration. This produces consistent, correct output in a single pass because agents can't run/test Unity code from CLI.
+**Trade-off:** Higher prompt token cost, but dramatically faster execution and fewer retries.
+**When to use:** Unity projects where agents cannot verify their output via compilation/tests.
+
+### Centralized Git for Parallel Agents
+**Source:** KingOfOpera (evolved from FlappyKookaburra lesson)
+**Context:** Multiple agents writing files in parallel on the same repo
+**Pattern:** Agents only write files — no git operations. The orchestrator commits after each batch completes. This eliminates branch contention entirely. Combined with file-conflict detection before batching (tasks in same batch must create distinct files).
+**When to use:** Always when running parallel agents on a single git repo.
+
 ---
 
 ## Anti-Patterns (What NOT to Do)
@@ -254,6 +349,16 @@ if (_deathSequence != null) {
 **Source:** FlappyKookaburra (Phase 5-6)
 **Problem:** Building a 5-part bird rig (body, 2 wings, tail, eye) with rotation-based animation before knowing the final art format. When real art arrived as a single sprite, the entire rig was scrapped in favor of simple scale animation.
 **Fix:** Implement the simplest viable animation first (scale-based squash/stretch). Only upgrade to complex rigs (multi-part, rotation-based) after confirming that decomposed art assets are available. Design the code to support both paths via strategy pattern or component swapping.
+
+### Stale Task Board
+**Source:** ChatAgent v2
+**Problem:** All 80 v2 tasks remained PENDING in the task board until final sync, even though 15 batches had been committed. Anyone checking the board would think no work was done.
+**Fix:** Update task statuses after each batch commit. If using batch execution, mark all tasks in the batch as DONE in the same session. Consider automating this via a post-commit hook or a `/sync-docs tasks` command.
+
+### Test Files in Production Build
+**Source:** ChatAgent v2
+**Problem:** Test files using `import.meta.url` or Vitest-specific imports caused TypeScript compilation errors (`TS1470: 'import.meta' not allowed in CommonJS output`) when included in the production tsconfig.
+**Fix:** Exclude test files from all workspace tsconfigs from the start: `"exclude": ["*.test.ts", "src/**/*.test.ts"]`. Vitest uses its own config and doesn't need these tsconfigs. Establish this pattern in the project scaffold, not as a retroactive fix.
 
 ### PPU (Pixels Per Unit) Assumptions
 **Source:** FlappyKookaburra (Phase 5-6)
