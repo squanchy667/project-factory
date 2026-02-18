@@ -61,7 +61,7 @@ Identify reusable patterns:
 - Update existing patterns with refinements
 - Remove patterns that proved unhelpful
 
-**Create `project-factory/knowledge-base/{project}-retrospective.md`:**
+**Create `project-factory/knowledge-base/retrospectives/{project}-retrospective.md`:**
 - Project overview and tech stack
 - Phase completion summary
 - Key learnings (what worked, what didn't)
@@ -109,7 +109,7 @@ Agent Effectiveness:
   Least used: {agent-type} ({N} tasks)
 
 Retrospective written to:
-  project-factory/knowledge-base/{project}-retrospective.md
+  project-factory/knowledge-base/retrospectives/{project}-retrospective.md
 ```
 
 ## Important Notes

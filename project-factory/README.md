@@ -50,8 +50,12 @@ project-factory/
 │   └── task-spec.md              ← Canonical task spec format
 └── knowledge-base/
     ├── patterns-catalog.md       ← Proven patterns from completed projects
-    ├── chatagent-retrospective.md
-    └── battlenet-retrospective.md
+    ├── research-strategy.md      ← How agent-researcher searches
+    └── retrospectives/           ← Post-project analyses
+        ├── chatagent-retrospective.md
+        ├── flappykookaburra-retrospective.md
+        ├── kingofopera-retrospective.md
+        └── battlenet-retrospective.md
 ```
 
 The meta-layer itself lives at `.claude/` in the workspace root:
@@ -288,8 +292,10 @@ Proven patterns extracted from completed projects, organized by category:
 
 ### Retrospectives
 
-Post-project analyses for completed projects:
-- `chatagent-retrospective.md` — Full-stack AWS platform (33 tasks)
+Post-project analyses in `knowledge-base/retrospectives/`:
+- `chatagent-retrospective.md` — Full-stack AWS platform (150 tasks)
+- `flappykookaburra-retrospective.md` — Unity 2D game (20 tasks)
+- `kingofopera-retrospective.md` — Unity multiplayer party game (30 tasks)
 - `battlenet-retrospective.md` — Unity multiplayer game
 
 ## Extending the Factory

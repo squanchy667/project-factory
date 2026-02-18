@@ -133,7 +133,7 @@ After ALL phases complete successfully, run `/sync-docs full` to synchronize doc
 Run `/capture-learnings {ProjectName}`.
 
 This produces:
-- Retrospective document in `project-factory/knowledge-base/{project-slug}-retrospective.md`
+- Retrospective document in `project-factory/knowledge-base/retrospectives/{project-slug}-retrospective.md`
 - Updates to patterns catalog if new patterns were identified
 
 **Checkpoint:** Report patterns added, retrospective location.
@@ -154,7 +154,7 @@ Step 3 — Configure: ✓ {A} agents, {B} commands, {C} skills
 Step 4 — Test:      ✓ {T} test files, {U} assertions
 Step 5 — Build:     ✓ {D}/{N} tasks complete across {M} phases
 Step 6 — Docs:      ✓ Synced
-Step 7 — Learn:     ✓ Retrospective at project-factory/knowledge-base/{slug}-retrospective.md
+Step 7 — Learn:     ✓ Retrospective at project-factory/knowledge-base/retrospectives/{slug}-retrospective.md
 
 Project: /Users/ofek/Projects/Claude/{ProjectName}/
 Code:    {project-slug}/
