@@ -380,6 +380,50 @@ await prisma.agentSession.create({ data: { requirement: JSON.parse(JSON.stringif
 ```
 **When to use:** Any Prisma model with `Json` columns that store complex typed objects.
 
+### Chrome Extension Messaging (Manifest V3)
+**Source:** DiraFinder
+**Context:** Chrome extensions with content scripts, service worker, and popup
+**Pattern:** Three-way messaging: Popup→ServiceWorker via `chrome.runtime.sendMessage`, ServiceWorker→ContentScript via `chrome.tabs.sendMessage`, ContentScript→ServiceWorker via `chrome.runtime.sendMessage`. All async handlers must `return true` to keep the message channel open. Define typed message interfaces with a discriminated union on `type` field.
+```typescript
+// Typed messages
+type Message = { type: 'SCAN_PAGE' } | { type: 'SET_BADGE'; payload: number } | ...;
+// Handler pattern
+chrome.runtime.onMessage.addListener((msg: Message, _sender, sendResponse) => {
+  switch (msg.type) {
+    case 'SCAN_PAGE': { doAsync().then(sendResponse); return true; }
+  }
+});
+```
+**When to use:** Any Chrome Manifest V3 extension with content scripts and popup.
+
+### Bot-Protected Site Scraping (Research-First)
+**Source:** DiraFinder
+**Context:** Building scrapers/extensions for sites with bot protection (ShieldSquare, PerimeterX, Cloudflare)
+**Pattern:** Direct WebFetch of modern sites often fails due to bot protection. Instead: (1) Search GitHub for existing scrapers targeting the same site, (2) Extract CSS selectors and DOM structure from their code, (3) Prefer `data-*` attributes and `[class*="stable_prefix"]` over full class names (CSS Modules hash suffixes change per deploy). Document selectors with comments noting they may break on site redesign.
+**When to use:** Any project that scrapes or parses a modern web application with bot protection.
+
+### Chrome Storage Typed Wrappers
+**Source:** DiraFinder
+**Context:** Chrome extensions storing multiple data types in Chrome Storage
+**Pattern:** Create typed wrapper functions per storage key rather than accessing `chrome.storage.local` directly. Each function handles serialization, defaults, and type casting. Keep storage keys as constants.
+```typescript
+const KEY = 'prefix_entity';
+export async function loadEntity(): Promise<Entity | null> {
+  const result = await chrome.storage.local.get(KEY);
+  return (result[KEY] as Entity) ?? null;
+}
+export async function saveEntity(entity: Entity): Promise<void> {
+  await chrome.storage.local.set({ [KEY]: entity });
+}
+```
+**When to use:** Any Chrome extension using Chrome Storage API with typed data.
+
+### Sequential Phase Execution for Small Projects
+**Source:** DiraFinder
+**Context:** Projects with 20 or fewer tasks
+**Pattern:** For small projects (under ~25 tasks), sequential per-phase execution with batched commits is more efficient than parallel agent orchestration. The overhead of worktree management, merge resolution, and agent coordination exceeds the parallelism benefit. Execute all tasks in a phase sequentially, run quality gate (typecheck + tests), then commit as a single phase commit.
+**When to use:** Projects with fewer than 25 tasks or when the orchestrator handles execution directly.
+
 ---
 
 ## Anti-Patterns (What NOT to Do)
