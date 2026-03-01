@@ -16,14 +16,15 @@ Each project lives in its own parent directory with paired repos:
 
 | Command | Purpose |
 |---------|---------|
-| `/build-app` | Full pipeline: idea → production (orchestrates all commands below) |
-| `/init-project` | Create project structure from idea |
-| `/plan-project` | Generate full planning artifacts |
-| `/tailor-agents` | Generate project-specific .claude/ config |
-| `/generate-tests` | Generate tests from task specs before implementation |
-| `/execute-phase` | Run a phase with parallel agents |
-| `/sync-docs` | Keep docs in sync with code |
-| `/capture-learnings` | Extract reusable knowledge |
+| `/build-app` | Full orchestration: goal → plan → configure → execute → document → learn |
+| `/plan-project` | Decompose a goal into a phased, token-budgeted execution plan |
+| `/execute-phase` | Run all tasks in a phase with parallel execution and artifact handoff |
+| `/do-task` | Execute a single task through the 8-step pipeline |
+| `/task-execute` | Execute a task from the task board autonomously |
+| `/scan-repo` | Index an existing codebase for smarter context selection |
+| `/convert-repo` | Convert any existing repository to dual-repo format |
+| `/design-schema` | Design a Zod schema with inferred TypeScript type (validation-first) |
+| `/capture-learnings` | Extract reusable patterns from a completed project |
 
 ## Docs Repo Standard
 
