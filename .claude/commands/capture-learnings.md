@@ -1,119 +1,82 @@
-# Capture Learnings
+# /capture-learnings
 
-Extract reusable knowledge from a completed (or in-progress) project and feed it back into the project factory knowledge base.
+Extract reusable patterns from a completed project to improve future agent building.
 
-## Input
-
-$ARGUMENTS — project name (e.g., "ChatAgent", "BattleNet")
-
-## Process
-
-### 1. Locate Project
-Find the project at `/Users/ofek/Projects/Claude/{ProjectName}/`.
-Read both code and docs repos.
-
-### 2. Gather Data
-
-**From docs repo:**
-- PLAN.md — original vision and planned phases
-- TASK_BOARD.md — actual task execution (planned vs completed)
-- resources/changelog.md — chronological record of changes
-- resources/known-issues.md — problems encountered
-- development-agents.md — agent strategy used
-
-**From code repo:**
-- .claude/CLAUDE.md — conventions that evolved
-- .claude/agents/ — which agents were created and used
-- .claude/commands/ — which commands were created
-- .claude/skills/ — knowledge domains captured
-- git log — commit patterns, branch history
-
-### 3. Analyze: Planned vs Actual
-
-Compare what was planned with what happened:
-- Were phases added or removed?
-- Were tasks added, modified, or dropped?
-- Did scope change significantly?
-- What took longer than expected?
-- What was easier than expected?
-
-### 4. Rate Agent Effectiveness
-
-For each agent type used:
-- How many tasks did it handle?
-- Were its outputs accepted on first try or needed revision?
-- What patterns did it establish that others followed?
-- Were any agent types underused or unnecessary?
-
-### 5. Extract Patterns
-
-Identify reusable patterns:
-- **Architecture patterns** — How was the system structured? What worked?
-- **Code patterns** — What coding patterns emerged? (validation, error handling, etc.)
-- **Process patterns** — What execution strategies worked? (batch size, parallelism)
-- **Documentation patterns** — What docs were most useful? What was missing?
-- **Agent patterns** — What made agents effective? What contexts did they need?
-
-### 6. Update Knowledge Base
-
-**Update `project-factory/knowledge-base/patterns-catalog.md`:**
-- Add new patterns discovered
-- Update existing patterns with refinements
-- Remove patterns that proved unhelpful
-
-**Create `project-factory/knowledge-base/retrospectives/{project}-retrospective.md`:**
-- Project overview and tech stack
-- Phase completion summary
-- Key learnings (what worked, what didn't)
-- Agent effectiveness ratings
-- Patterns extracted
-- Recommendations for similar projects
-
-### 7. Identify Template Candidates
-
-Look for structures that could become new templates:
-- New project type? → Add to `templates/docs/{type}/`
-- New agent role? → Add to `templates/claude-config/agents/`
-- New command pattern? → Add to `templates/claude-config/commands/`
-- New skill domain? → Add to `templates/claude-config/skills/`
-
-Flag these for addition to project-factory.
-
-### 8. Report
+## Usage
 
 ```
-Learnings Captured: {ProjectName}
-==================================
-
-Project Stats:
-  Phases: {planned} planned → {actual} actual
-  Tasks: {planned} planned → {completed}/{total} completed
-  Agent Types: {count} used
-  Duration: {phases completed across N sessions}
-
-Top Learnings:
-  1. {Key insight}
-  2. {Key insight}
-  3. {Key insight}
-
-Patterns Added to Catalog: {count}
-  - Pattern Name: brief description
-  - ...
-
-Template Candidates: {count}
-  - {type}: {description}
-  - ...
-
-Agent Effectiveness:
-  Most effective: {agent-type} ({N} tasks, {success_rate}% first-try)
-  Least used: {agent-type} ({N} tasks)
-
-Retrospective written to:
-  project-factory/knowledge-base/retrospectives/{project}-retrospective.md
+/capture-learnings AgentPilot
+/capture-learnings --project ./myproject
 ```
 
-## Important Notes
-- Don't overwrite existing knowledge base entries — merge and update
-- Patterns should be actionable, not vague ("use Zod-first validation" not "validation is important")
-- Retrospectives should be honest — include what didn't work
-- Template candidates should be flagged, not auto-created (human review first)
+## Description
+
+Analyzes completed task results to extract patterns for the flywheel:
+1. **Config scoring** — Which config bank entries performed best → update qualityHistory scores
+2. **Strategy analysis** — Which context strategies worked → refine strategy weights
+3. **Failure patterns** — Common failure modes → add to quality gate heuristics
+4. **Retrospective** — Generate readable project retrospective document
+
+## Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `project` | string or path | (required) | Project name or path to output directory |
+| `--output` | path | none | Custom output path for retrospective |
+
+## Pipeline
+
+### Step 1: Collect Metrics
+- Load all task metrics from output directory (`metrics.json` per task)
+- Load artifact registry for artifact statistics
+- Load phase reports for quality gate results
+
+### Step 2: Analyze Config Performance
+- Group tasks by config sources used
+- Calculate average quality score per config
+- Identify top-performing and under-performing configs
+- Update `qualityHistory` arrays in config bank JSON files
+
+### Step 3: Analyze Strategy Effectiveness
+- Group tasks by context strategy used
+- Measure token efficiency (usage vs budget)
+- Identify strategies that led to over/under-budget executions
+- Suggest strategy weight adjustments
+
+### Step 4: Identify Failure Patterns
+- Categorize failed tasks by failure type (timeout, low quality, missing output)
+- Identify common domains/stacks in failures
+- Generate heuristics for quality gate improvements
+
+### Step 5: Generate Retrospective
+- Project overview (tasks, phases, total tokens, total time)
+- Per-phase summary with quality gate results
+- Top patterns discovered
+- Config bank updates applied
+- Recommendations for future projects
+
+## Output
+
+### Config Bank Updates
+```json
+{
+  "configId": "backend-api",
+  "qualityHistory": [85, 90, 78, 92],
+  "avgScore": 86.25
+}
+```
+
+### Retrospective Document
+Written to `output/retrospective.md` with:
+- Summary statistics
+- Phase-by-phase results
+- Patterns and learnings
+- Config bank score updates
+
+## Flywheel Effect
+
+```
+Better configs → Better agents → Better output → Better configs
+     ↑                                              |
+     └──────────── /capture-learnings ──────────────┘
+```

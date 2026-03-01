@@ -1,123 +1,73 @@
-# Execute Phase
+# /execute-phase
 
-Run all tasks in a phase with parallel agent execution, quality gates, and automatic status tracking.
+Run all tasks in a phase with parallel execution and artifact handoff.
 
-## Input
-
-$ARGUMENTS — phase number (e.g., "1", "1.5", "2")
-
-## Process
-
-### 1. Load Phase Tasks
-Read `{project-slug}-docs/TASK_BOARD.md` and extract all tasks for the specified phase.
-
-If no project is detected from cwd, ask which project to execute.
-
-### 2. Filter to Actionable Tasks
-- Include only PENDING tasks
-- Exclude DONE, IN_PROGRESS, or BLOCKED tasks
-- Verify cross-phase dependencies (tasks from earlier phases) are DONE
-- If any cross-phase dependencies are not DONE, report them and stop
-
-### 3. Compute Execution Batches
-Topological sort of the dependency graph within this phase:
+## Usage
 
 ```
-Batch 1: Tasks with no intra-phase dependencies
-Batch 2: Tasks that depend only on Batch 1 tasks
-Batch 3: Tasks that depend on Batch 1+2 tasks
-...
+/execute-phase 1
+/execute-phase "Foundation"
 ```
 
-**Conflict detection**: If two tasks in the same batch modify the same file (check "Files to Create/Modify" in specs), move one to the next batch.
+## Description
 
-Display the batch plan before executing:
-```
-Phase {N} Execution Plan:
-  Batch 1 (parallel): T001 [scaffold-agent/haiku], T008 [types-agent/sonnet]
-  Batch 2 (parallel): T002 [backend-agent/sonnet], T003 [frontend-agent/sonnet]
-  Batch 3 (sequential): T005 [infra-agent/sonnet] → T006 [test-agent/haiku]
-  Quality gate: haiku
-```
+Loads a phase from the execution plan and runs all its tasks through the /do-task pipeline:
+1. Parse phase tasks and dependencies
+2. Build execution batches (parallel groups using dependency graph)
+3. Execute each batch — independent tasks run in parallel
+4. Collect artifacts and prepare handoffs for downstream phases
+5. Quality gate: determine phase pass/fail based on task results
+6. Generate phase report with per-task metrics
 
-### 3.5. Cost Assessment
+## Parameters
 
-Before executing, run the `cost-assessor` agent to estimate token usage and cost for this phase.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `phase` | number or string | (required) | Phase number or name |
+| `--dry-run` | flag | false | Show execution plan without running |
+| `--stop-on-failure` | flag | false | Halt remaining tasks if one fails |
+| `--budget` | number | 10000 | Total token budget for the phase |
 
-Present the projection table to the user showing:
-- Per-task estimated tokens and cost by assigned model
-- Alternative costs if models were swapped
-- Total phase estimate
+## Pipeline
 
-**USER CHECKPOINT**: The user reviews the assessment and can:
-- **Approve** — proceed with current model assignments
-- **Override** — specify task:model pairs to change (e.g., "T005:opus, T008:haiku")
-- **Cancel** — abort phase execution
+### Step 1: Plan Execution (`PhaseRunner.planExecution`)
+- Groups tasks into batches by dependency layers
+- Tasks whose dependencies are all satisfied go in the same batch
+- Batches execute sequentially; tasks within a batch run in parallel
 
-If overrides are specified, update the task's agent invocation to use the overridden model.
+### Step 2: Execute Batches (`PhaseRunner.runPhase`)
+- Each task runs through the full 8-step do-task pipeline
+- Per-task failures are captured but don't halt the phase
+- Token budget split evenly across tasks in the phase
 
-### 4. Execute Each Batch
-For each batch, launch parallel Task agents:
+### Step 3: Artifact Collection (`ArtifactRegistry`)
+- Task outputs stored as tagged artifacts
+- Artifacts tagged by domain for relevance-based retrieval
+- Persisted as JSON to output directory
 
-Each agent receives:
-- The task spec file content
-- The project's CLAUDE.md conventions
-- Relevant existing code context (files referenced in task spec)
-- The appropriate skill context
+### Step 4: Quality Gate
+- Pass rate threshold: 60% of tasks must succeed
+- Average quality threshold: 50/100 minimum
+- Reports detailed reason for pass/fail
 
-Each agent must:
-1. Create branch: `feat/TXXX-task-name`
-2. Implement the task following project conventions
-3. Run verification (typecheck, tests, lint)
-4. Commit: `[Phase X] TXXX: Brief description`
-5. Report results
+### Step 5: Phase Report
+- Per-task results with quality scores
+- Aggregate metrics (pass rate, avg quality, timing)
+- Quality gate verdict
 
-**Parallelism limit**: Maximum 3-5 concurrent agents per batch to manage merge complexity.
+## Module Exports
 
-### 5. Quality Gate
-After each task completes, run the `quality-gate` agent to validate:
-- All acceptance criteria met
-- Types pass
-- Tests pass
-- No hardcoded secrets
-- No lint violations
-- Files match the task spec's "Files to Create/Modify"
-
-Results: **PASS** or **FAIL** with specifics.
-
-### 6. Update Task Board
-For each completed task:
-- If quality gate PASS → mark DONE on TASK_BOARD.md
-- If quality gate FAIL → mark BLOCKED with failure reason
-- Add note about what failed for retry
-
-### 7. Update Changelog
-Append to `resources/changelog.md`:
-```markdown
-## [YYYY-MM-DD] Phase {N}, Batch {M}
-- TXXX: Brief description — DONE
-- TYYY: Brief description — DONE
-- TZZZ: Brief description — FAILED (reason)
+```typescript
+import {
+  PhaseRunner,         // Phase execution engine
+  ArtifactRegistry,    // Tagged artifact storage
+  HandoffManager,      // Inter-phase handoff preparation
+} from './core/orchestrator/index.js';
 ```
 
-### 8. Report
-Output summary:
-```
-Phase {N} Execution Report
-========================
-Batch 1: T001 ✓, T008 ✓
-Batch 2: T002 ✓, T003 ✓, T004 ✗ (test failures)
-Batch 3: T005 ✓, T006 (skipped — depends on T004)
+## Quality Gate Thresholds
 
-Results: 5/7 tasks complete, 1 failed, 1 skipped
-Failed: T004 — 2 test failures in auth.test.ts
-Skipped: T006 — blocked by T004
-
-Next: Fix T004 failures, then re-run `/execute-phase {N}`
-```
-
-## Important Notes
-- Never force-push or overwrite another agent's work
-- If a task fails, don't retry automatically — report for human review
-- Keep branches separate (one per task) to avoid merge conflicts
-- After all batches complete, consider merging task branches to main
+| Metric | Threshold | Description |
+|--------|-----------|-------------|
+| Pass rate | ≥ 60% | Minimum percentage of tasks that must succeed |
+| Avg quality | ≥ 50 | Minimum average quality score across tasks |

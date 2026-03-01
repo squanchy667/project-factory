@@ -1,111 +1,81 @@
-# Plan Project
+# /plan-project
 
-Generate full planning artifacts for a project — architecture docs, phased task breakdown, dependency graph, and agent strategy.
+Decompose a high-level goal into a phased, token-budgeted execution plan.
 
-## Input
+## Usage
 
-$ARGUMENTS — project name (e.g., "CollabTool"). If omitted, detect from current working directory.
+```
+/plan-project "Build a REST API for a blog platform"
+/plan-project "Convert legacy Express app to TypeScript" --repo ./myproject
+```
 
-## Process
+## Description
 
-### 1. Locate Project
-Find the project at `/Users/ofek/Projects/Claude/{ProjectName}/`.
-Identify:
-- Code repo: `{project-slug}/`
-- Docs repo: `{project-slug}-docs/`
+Takes a high-level project goal and produces a complete execution plan:
+1. Decompose goal into 15–60 individual tasks via keyword analysis and domain templates
+2. Build dependency graph with cycle detection and validation
+3. Cluster tasks by context affinity (shared domains, files, stack) respecting topological order
+4. Assign token budgets per phase with handoff overhead accounting
+5. Generate human-readable budget reports
 
-If the docs repo doesn't exist, tell the user to run `/init-project` first.
+## Parameters
 
-### 2. Read Existing Context
-- Read `{project-slug}-docs/README.md` for vision and description
-- Read `{project-slug}-docs/PLAN.md` for any existing planning (may have been manually enriched)
-- Read code repo structure to understand what's already built
-- Check project type from template markers or infer from tech stack
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `goal` | string | (required) | High-level project description |
+| `--repo` | path | none | Path to existing repo (uses scan index for file context) |
+| `--max-phases` | number | 8 | Maximum number of phases |
+| `--max-tokens` | number | 15000 | Token ceiling per agent |
 
-### 3. Generate Architecture Docs
-Use the `project-planner` agent to produce:
+## Pipeline
 
-**`architecture/system-overview.md`**:
-- High-level architecture diagram (ASCII art)
-- Component descriptions with responsibilities
-- Technology choices and rationale
-- Deployment topology
-- Key design decisions
+### Step 1: Task Decomposition (`task-decomposer.ts`)
+- Detects domains from goal text (database, backend, frontend, auth, testing, devops, styling)
+- Detects tech stack (typescript, express, react, nextjs, prisma, postgres, etc.)
+- Selects templates: Foundation → Database → Backend → Frontend → Testing → DevOps → Polish
+- Builds inter-task dependency chains based on phase ordering
+- If `--repo` provided, enriches tasks with repo file references and framework info
 
-**`architecture/data-flow.md`**:
-- Request/response flow diagrams
-- Data transformation pipeline
-- State management approach
-- Error handling and propagation
+### Step 2: Dependency Graph (`dependency-graph.ts`)
+- Builds DAG from task dependencies
+- Validates for cycles (DFS coloring) and missing references
+- Produces topological sort for execution ordering
+- Identifies parallel groups (tasks with all deps satisfied concurrently)
 
-### 4. Generate Phase Breakdown
-Use the `project-planner` agent to break the project into phases:
-- Phase 1 — Foundation (scaffold, types, core infra)
-- Phase 2+ — Feature phases (based on project scope)
-- Final phase — Production (security, deployment, monitoring)
+### Step 3: Context Affinity Clustering (`context-affinity.ts`)
+- Uses parallel groups from dependency graph as base layers
+- Computes affinity scores: shared domains (0.4), files (0.35), stack (0.25)
+- Merges small groups with high affinity into existing phases
+- Splits groups exceeding 15K token budget
+- Outputs Phase objects with task assignments and estimated tokens
 
-Each phase should have:
-- A clear theme/goal
-- 3-12 tasks
-- Logical dependency ordering
-
-### 5. Generate Task Specs
-For each task, create `tasks/phase-X/TXXX-task-name.md` with:
-- Meta (phase, agent type, dependencies, blocks, branch)
-- Objective (1-2 sentences)
-- Context (why it matters)
-- Numbered subtasks with concrete file paths
-- Files to create/modify (with actual paths)
-- Acceptance criteria (testable checkboxes)
-
-### 6. Build TASK_BOARD.md
-Phase tables with columns:
-| ID | Task | Agent Type | Depends On | Status |
-
-- Link task names to their spec files
-- Mark all tasks as PENDING
-- Add summary table at bottom
-
-### 7. Generate development-agents.md
-- List all agent types needed for this project
-- Describe what each handles
-- Map tasks to agent types
-- Include batch execution plan:
-  - Batch ordering (topological sort)
-  - Parallelism recommendations
-  - Estimated agent count per batch
-
-### 8. Update SUMMARY.md
-Rebuild the table of contents to include:
-- All architecture docs
-- All developer docs
-- Product docs
-- Testing docs
-- Task board + phase directories
-
-### 9. Update PLAN.md
-Enrich with:
-- Architecture summary (link to full docs)
-- Phase overview with task counts
-- Dependency graph summary
-- Timeline estimate (phases, not dates)
+### Step 4: Token Budgeting (`token-budgeter.ts`)
+- Assigns per-task budgets by complexity: low=5K, medium=8K, high=12K
+- Accounts for handoff overhead: 1K per previous phase
+- Enforces 15K agent ceiling
+- Generates human-readable budget report per phase
 
 ## Output
 
-Report:
-- Phases: {count} phases
-- Tasks: {count} total tasks
-- Agent types: {list}
-- Batch execution: {count} batches, max {N} parallel agents
-- Files created: {list}
-- Next step: "Run `/tailor-agents {ProjectName}` to generate project-specific .claude/ config"
+Returns an array of `BudgetedPhase` objects, each containing:
+- `tokenBudget` — total tokens for the phase
+- `maxAgentBudget` — ceiling for any single agent in the phase
+- `handoffOverhead` — tokens consumed by previous phase summaries
+- `perTaskBudgets` — per-task token allocations
+- `report` — human-readable budget summary
 
-## Quality Checklist
-- [ ] Every task has a spec file in tasks/phase-X/
-- [ ] Every task has concrete file paths (not generic)
-- [ ] Every task has testable acceptance criteria
-- [ ] Dependencies form a valid DAG (no cycles)
-- [ ] Phase 1 produces a running application
-- [ ] SUMMARY.md links are all valid
-- [ ] TASK_BOARD.md matches task spec files
-- [ ] No {{placeholder}} variables remain
+## Module Exports
+
+All planner functionality is available from `core/planner/index.ts`:
+
+```typescript
+import {
+  decomposeTasks,          // Goal → DecomposedTask[]
+  buildDependencyGraph,    // Tasks → DependencyGraph
+  validateGraph,           // Graph → ValidationResult
+  topologicalSort,         // Graph → ordered tasks
+  getParallelGroups,       // Graph → concurrent groups
+  clusterTasks,            // Tasks → Phase[]
+  budgetPhases,            // Phases → BudgetedPhase[]
+} from './core/planner/index.js';
+```
