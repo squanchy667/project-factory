@@ -1,4 +1,4 @@
-# Ignore everything
+# Ignore everything by default (each project has its own git repo)
 /*
 
 # Track meta-layer and project-factory
@@ -7,3 +7,8 @@
 !/README.md
 !/GUIDE.md
 !/project-factory/
+
+# Exclude local/machine-specific files
+.claude/settings.local.json
+.claude/memory/
+.DS_Store

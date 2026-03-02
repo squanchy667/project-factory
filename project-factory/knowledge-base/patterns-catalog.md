@@ -51,7 +51,7 @@ export type User = z.infer<typeof UserSchema>;
 ## Process Patterns
 
 ### Phased Task Execution
-**Source:** ChatAgent, TarotBattlegrounds, FlappyKookaburra, AgentTailor
+**Source:** ChatAgent, TarotBattlegrounds, FlappyKookaburra, AgentTailor, AgentPilot
 **Context:** Large projects requiring systematic implementation
 **Pattern:** Break project into phases (Foundation → Core → Integration → Production). Each phase has tasks with dependency tracking. Tasks within a phase run in parallel batches. Before batching, cross-reference "Files to Create/Modify" to detect file conflicts — tasks touching the same file must be sequenced.
 **Optimal batch size:** 3-5 concurrent agents.
@@ -418,11 +418,52 @@ export async function saveEntity(entity: Entity): Promise<void> {
 ```
 **When to use:** Any Chrome extension using Chrome Storage API with typed data.
 
-### Sequential Phase Execution for Small Projects
-**Source:** DiraFinder
-**Context:** Projects with 20 or fewer tasks
-**Pattern:** For small projects (under ~25 tasks), sequential per-phase execution with batched commits is more efficient than parallel agent orchestration. The overhead of worktree management, merge resolution, and agent coordination exceeds the parallelism benefit. Execute all tasks in a phase sequentially, run quality gate (typecheck + tests), then commit as a single phase commit.
-**When to use:** Projects with fewer than 25 tasks or when the orchestrator handles execution directly.
+### Sequential Phase Execution for Small-to-Medium Projects
+**Source:** DiraFinder, AgentPilot
+**Context:** Projects with up to ~40 tasks
+**Pattern:** For projects under ~40 tasks, sequential per-phase execution with batched commits is more efficient than parallel agent orchestration. The overhead of worktree management, merge resolution, and agent coordination exceeds the parallelism benefit. Execute all tasks in a phase sequentially, run quality gate (typecheck + tests), then commit as a single phase commit. AgentPilot (41 tasks, 7 phases) confirmed this scales well beyond the original 20-25 task threshold.
+**When to use:** Projects with fewer than 40 tasks or when the orchestrator handles execution directly.
+
+### Weighted Config Bank Scoring
+**Source:** AgentPilot
+**Context:** Selecting the best agent configuration for a task from a library of configs
+**Pattern:** Score each config by weighted match across 3 dimensions: domain match (0.4), stack match (0.35), task type match (0.25). Each dimension scored 0-5 based on overlap between task analysis and config metadata. Top-scoring config's system prompt template gets assembled into the agent definition. Track `qualityHistory` scores per config for flywheel improvement.
+```typescript
+const score = domainScore * 0.4 + stackScore * 0.35 + taskTypeScore * 0.25;
+```
+**When to use:** Any AI tool system with a library of specialized configs/prompts that need to be matched to incoming tasks.
+
+### Context Affinity Clustering
+**Source:** AgentPilot
+**Context:** Grouping 15-60 tasks into execution phases
+**Pattern:** Build affinity matrix: shared domains (weight 0.4), shared files (0.35), shared stack (0.25). Use dependency graph's parallel groups as base layers (topological sort). Merge small adjacent groups with affinity > 0.2 if combined tokens fit within budget. Split groups exceeding 15K token budget. Produces phases that maximize shared context and minimize handoff waste.
+**When to use:** Any project planner that needs to group tasks into phases by context similarity.
+
+### Never-Crash Pipeline with Per-Step Fallbacks
+**Source:** AgentPilot
+**Context:** Multi-step AI execution pipeline where individual steps may fail
+**Pattern:** Wrap each pipeline step in try/catch with a meaningful fallback. The pipeline ALWAYS produces a report, even if every step fails. Fallback chain: analysis fails → use defaults + warn; agent build fails → minimal prompt + warn; execution fails → capture partial + report; tests fail → still document + report with lower quality score.
+```typescript
+try {
+  analysis = await analyzeTask(task);
+} catch (err) {
+  logWarning(`Analysis failed, using defaults: ${err.message}`);
+  analysis = { taskType: 'implementation', complexity: 'medium', ... };
+}
+```
+**When to use:** Any multi-step AI pipeline where partial results are better than no results.
+
+### Handoff Overhead Budgeting
+**Source:** AgentPilot
+**Context:** Multi-phase execution where later phases need context from earlier ones
+**Pattern:** Reserve ~1K tokens per previous phase for handoff summaries. Handoff manager generates concise phase summaries and selects artifacts by relevance to target domains (Jaccard similarity on tag sets). Compress selected artifacts to fit remaining budget via truncation. Later phases get progressively less task budget but accumulated context.
+**When to use:** Any phased execution system with inter-phase dependencies.
+
+### Class-Based for Stateful, Functions for Stateless
+**Source:** AgentPilot
+**Context:** Designing module APIs for a TypeScript library
+**Pattern:** Pipeline steps that transform data without side effects → exported functions (`analyzeTask()`, `buildAgent()`, `reportResults()`). Modules with persistence, accumulated state, or lifecycle → exported classes (`ArtifactRegistry`, `HandoffManager`, `PhaseRunner`). This keeps each module's API natural — no singleton hacks for stateless code, no function closures for stateful code.
+**When to use:** TypeScript libraries with a mix of pure transformations and stateful components.
 
 ---
 
@@ -503,6 +544,11 @@ export async function saveEntity(entity: Entity): Promise<void> {
 **Source:** AgentTailor v1.2
 **Problem:** A function returns `KnowledgeDomain[]` (union of literal string types), but when comparing with user input (a plain `string`), `Array.includes(userString)` fails because TypeScript's `includes()` signature requires the argument type to match the array element type.
 **Fix:** Cast the typed array to `string[]` before calling `includes()`: `(classifyDomains(text) as string[]).includes(userInput)`. Alternatively, use `.some(d => d === userInput)` with a type predicate.
+
+### Partial Mock Objects in Pre-Generated Tests
+**Source:** AgentPilot
+**Problem:** Pre-generated test fixtures pass partial objects (e.g., `{ relativePath: 'foo.ts' }`) to functions expecting full interfaces (with `layers`, `testCoverage`, `entryPoints`, etc.). This forces 20+ defensive `?.` and `?? []` additions throughout source code — adding noise and masking real bugs.
+**Fix:** Generate test fixtures with ALL required interface fields, even if values are trivial defaults. Use a `createMockStructure()` helper that fills every field. Only omit truly optional fields.
 
 ### PPU (Pixels Per Unit) Assumptions
 **Source:** FlappyKookaburra (Phase 5-6)
