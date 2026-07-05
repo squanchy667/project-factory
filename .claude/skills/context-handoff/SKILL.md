@@ -1,6 +1,24 @@
+---
+name: context-handoff
+description: Refine and structure a context handoff so the receiver stays cheap to run. Two cases — (1) hand a long-running orchestration/Master/supervisor chat to a FRESH chat after many turns (REFINE step, hot/cold digests, CURRENT STATE header, verify-ability cookbook, kickoff + §6 escalation templates); (2) pass build-app phase artifacts to the next phase (two-layer summary + domain-tagged, relevance-scored reports). Reach for it when a chat's context is filling with append-only ledgers/logs re-read every turn, when writing a handoff or successor-kickoff brief, or when compressing state to fit a token budget. Pairs with token-budgeting.
+---
+
 # Context Handoff
 
-Always-on context for managing artifact handoff between phases in Agent Pilot.
+Always-on context for managing handoff — both **phase→phase** (build-app pipeline) and
+**chat→chat** (long-running orchestration).
+
+## Two modes — pick by what you're handing off
+- **Phase → phase** (a build-app stage passes artifacts to the next): use the **Two-Layer
+  Phase Reports** below (summary + domain-tagged, relevance-scored artifacts).
+- **Chat → chat** (a long-running Master/supervisor/orchestration role hands a fresh chat
+  its state after many turns): use **`chat-handoff-protocol.md`** + **`chat-handoff-templates.md`**.
+  Key idea: the cost is *per-turn re-reading*, so REFINE before handoff — hot/cold digests,
+  a CURRENT STATE header, tiered reading, self-contained re-derivation commands, and the
+  verify-ability cookbook (hard-won mistakes baked in). Pairs with the `token-budgeting` skill.
+
+Both share the same principles: tiered/two-layer, relevance (hot/cold), compress-to-budget,
+audit trail.
 
 ## Two-Layer Phase Reports
 
